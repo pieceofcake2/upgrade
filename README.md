@@ -11,7 +11,13 @@ This plugin provides the `UpgradeShell` to help automate upgrading applications 
 
 ## Installation
 
-The Upgrade plugin is included with CakePHP 2.x by default.
+### Using Composer
+
+Install the plugin using Composer:
+
+```bash
+composer require --dev pieceofcake2/upgrade
+```
 
 ## Usage
 
