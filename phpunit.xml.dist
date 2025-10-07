@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="./Test/bootstrap.php"
+         backupGlobals="true"
+         stderr="true"
+         colors="true">
+    <php>
+        <ini name="memory_limit" value="-1"/>
+    </php>
+    <listeners>
+        <listener class="CakeFixtureInjector" file="./vendor/pieceofcake2/cakephp/lib/Cake/TestSuite/Fixture/CakeFixtureInjector.php"/>
+    </listeners>
+    <testsuites>
+        <testsuite name="All Tests">
+            <file>./Test/Case/AllUpgradeTest.php</file>
+        </testsuite>
+    </testsuites>
+    <coverage>
+        <include>
+            <directory suffix=".php">.</directory>
+        </include>
+        <exclude>
+            <directory>./Test</directory>
+            <directory>./vendor</directory>
+        </exclude>
+    </coverage>
+</phpunit>
