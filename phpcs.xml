@@ -7,8 +7,8 @@
     <arg name="colors"/>
     <arg name="parallel" value="16"/>
 
-    <file>./Console</file>
-    <file>./Test</file>
+    <file>Console</file>
+    <file>tests</file>
 
     <rule ref="CakePHP">
         <!-- ===== Namespace and Class Rules ===== -->
@@ -58,12 +58,12 @@
     </rule>
 
     <rule ref="CakePHP.Commenting.FunctionComment.Missing">
-        <exclude-pattern>Test/Case/*</exclude-pattern>
+        <exclude-pattern>tests/TestCase/*</exclude-pattern>
     </rule>
 
     <!-- Allow multiple classes in test files only (CakePHP2 test pattern) -->
     <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
-        <exclude-pattern>Test/Case/*</exclude-pattern>
+        <exclude-pattern>tests/TestCase/*</exclude-pattern>
     </rule>
 
     <!-- Allow non-camelCase method names in Console Commands (CakePHP2 shell method naming convention) -->
@@ -71,8 +71,8 @@
         <exclude-pattern>Console/Command/*</exclude-pattern>
     </rule>
 
-    <!-- Require return type hints for Test/Case only -->
+    <!-- Require return type hints for tests/TestCase only -->
     <rule ref="SlevomatCodingStandard.TypeHints.ReturnTypeHint.MissingNativeTypeHint">
-        <include-pattern>Test/Case/*</include-pattern>
+        <include-pattern>tests/TestCase/*</include-pattern>
     </rule>
 </ruleset>

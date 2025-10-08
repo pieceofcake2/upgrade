@@ -1,8 +1,5 @@
 <?php
 
-namespace Case;
-
-use CakeTestSuite;
 use PHPUnit\Framework\TestSuite;
 
 /**
