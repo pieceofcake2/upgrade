@@ -35,7 +35,8 @@ class AllConsoleTest extends TestSuite
      */
     public static function suite(): CakeTestSuite
     {
-        $suite = new CakeTestSuite('All Bake console classes');
+        $suite = new CakeTestSuite('All Upgrade console classes');
+        $suite->addTestDirectoryRecursive(__DIR__ . DS . 'Console');
 
         return $suite;
     }
