@@ -165,13 +165,7 @@ class UpgradeShell extends AppShell
             if (is_dir($old)) {
                 $this->out(__d('cake_console', 'Moving %s to %s', $old, $new));
                 if (!$this->params['dry-run']) {
-                    if ($this->params['git']) {
-                        exec('git mv -f ' . escapeshellarg($old) . ' ' . escapeshellarg($old . '__'));
-                        exec('git mv -f ' . escapeshellarg($old . '__') . ' ' . escapeshellarg($new));
-                    } else {
-                        $Folder = new Folder($old);
-                        $Folder->move($new);
-                    }
+                    $this->_moveFolder($old, $new);
                 }
             }
         }
@@ -636,15 +630,42 @@ class UpgradeShell extends AppShell
 
             $this->out(__d('cake_console', 'Moving %s to %s', $old, $new));
             if (!$this->params['dry-run']) {
-                if ($this->params['git']) {
-                    exec('git mv -f ' . escapeshellarg($old) . ' ' . escapeshellarg($old . '__'));
-                    exec('git mv -f ' . escapeshellarg($old . '__') . ' ' . escapeshellarg($new));
-                } else {
-                    $Folder = new Folder($old);
-                    $Folder->move($new);
-                }
+                $this->_moveFolder($old, $new);
             }
         }
+    }
+
+    /**
+     * Move a folder relative to the current working directory.
+     *
+     * The folder is renamed through a temporary name first, so that case-only renames
+     * (e.g. `config` to `Config`) also work on case-insensitive filesystems.
+     * If the destination already exists, the contents are merged into it.
+     *
+     * @param string $old The folder to move.
+     * @param string $new The destination folder.
+     * @return void
+     */
+    protected function _moveFolder($old, $new)
+    {
+        $tmp = $old . '__';
+        if ($this->params['git']) {
+            exec('git mv -f ' . escapeshellarg($old) . ' ' . escapeshellarg($tmp));
+            exec('git mv -f ' . escapeshellarg($tmp) . ' ' . escapeshellarg($new));
+
+            return;
+        }
+
+        rename($old, $tmp);
+        if (!is_dir($new)) {
+            rename($tmp, $new);
+
+            return;
+        }
+
+        $cwd = getcwd() . DS;
+        $Folder = new Folder($cwd . $tmp);
+        $Folder->move($cwd . $new);
     }
 
     /**

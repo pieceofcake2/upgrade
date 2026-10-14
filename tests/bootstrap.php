@@ -5,13 +5,18 @@
 
 use Composer\InstalledVersions;
 
-define('DS', DIRECTORY_SEPARATOR);
-define('VENDORS', dirname(__DIR__) . DS . 'vendor' . DS);
-define('ROOT', VENDORS . 'pieceofcake2' . DS . 'app');
+if (!defined('DS')) {
+    define('DS', DIRECTORY_SEPARATOR);
+}
+if (!defined('VENDORS')) {
+    define('VENDORS', dirname(__DIR__) . DS . 'vendor' . DS);
+}
+if (!defined('ROOT')) {
+    define('ROOT', realpath(InstalledVersions::getInstallPath('pieceofcake2/app')));
+}
 
 require_once InstalledVersions::getInstallPath('pieceofcake2/cakephp') . DS . 'tests' . DS . 'bootstrap.php';
 
-App::uses('CakePlugin', 'Core');
 CakePlugin::load('Upgrade', [
     'path' => dirname(__DIR__) . DS,
 ]);
