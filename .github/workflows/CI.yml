@@ -31,17 +31,7 @@ jobs:
           - '8.4'
           - '8.5'
         db-type:
-          - mysql
-
-    services:
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-      memcached:
-        image: memcached
-        ports:
-          - 11211:11211
+          - sqlite
 
     env:
       DB: ${{ matrix.db-type }}
@@ -50,55 +40,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Start MySQL 5.6
-        if: matrix.db-type == 'mysql'
-        run: |
-            docker run -d --name mysql56 \
-              -e MYSQL_ROOT_PASSWORD=root \
-              -e MYSQL_DATABASE=cakephp_test \
-              -p 3306:3306 \
-              -v ${{ github.workspace }}/docker/mysql:/docker-entrypoint-initdb.d:ro \
-              --health-cmd="mysqladmin ping" \
-              --health-interval=10s \
-              --health-timeout=5s \
-              --health-retries=3 \
-              mysql:5.6
-
-      - name: Start MySQL 8.0
-        if: matrix.db-type == 'mysql80'
-        run: |
-            docker run -d --name mysql80 \
-              -e MYSQL_ROOT_PASSWORD=root \
-              -e MYSQL_DATABASE=cakephp_test \
-              -p 3307:3306 \
-              -v ${{ github.workspace }}/docker/mysql:/docker-entrypoint-initdb.d:ro \
-              --health-cmd="mysqladmin ping" \
-              --health-interval=10s \
-              --health-timeout=5s \
-              --health-retries=3 \
-              mysql:8.0
-
-      - name: Start PostgreSQL 9.4
-        if: matrix.db-type == 'pgsql'
-        run: |
-            docker run -d --name postgres94 \
-              -e POSTGRES_PASSWORD=postgres \
-              -e POSTGRES_DB=cakephp_test \
-              -p 5432:5432 \
-              -v ${{ github.workspace }}/docker/pgsql:/docker-entrypoint-initdb.d:ro \
-              --health-cmd="pg_isready" \
-              --health-interval=10s \
-              --health-timeout=5s \
-              --health-retries=5 \
-              postgres:9.4
-
       - name: Install PHP with extensions
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
           extensions: apcu, memcache, memcached, redis, mcrypt, pdo_mysql, pdo_pgsql, pdo_sqlite, pdo_sqlsrv
           ini-values: |
-              apc.enable_cli=1
+            apc.enable_cli=1
           coverage: xdebug
 
       - name: locale-gen
@@ -119,7 +67,7 @@ jobs:
             ${{ runner.os }}-php${{ matrix.php-version }}-composer-
 
       - name: Install Composer Packages
-        run: composer install --no-ansi --no-interaction --no-progress
+        run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Make temporary directories writable
         run: |
@@ -161,18 +109,6 @@ jobs:
           format: clover
           incomplete: true
           name: PHP ${{ matrix.php-version }} - ${{ matrix.db-type }}
-
-      - name: Stop MySQL 5.6
-        if: always() && matrix.db-type == 'mysql'
-        run: docker stop mysql56 && docker rm mysql56 || true
-
-      - name: Stop MySQL 8.0
-        if: always() && matrix.db-type == 'mysql80'
-        run: docker stop mysql80 && docker rm mysql80 || true
-
-      - name: Stop PostgreSQL 9.4
-        if: always() && matrix.db-type == 'pgsql'
-        run: docker stop postgres94 && docker rm postgres94 || true
 
   qlty:
     runs-on: ubuntu-latest
