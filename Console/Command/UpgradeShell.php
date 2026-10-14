@@ -665,7 +665,7 @@ class UpgradeShell extends AppShell
 
         $cwd = getcwd() . DS;
         $Folder = new Folder($cwd . $tmp);
-        $Folder->move($cwd . $new);
+        $Folder->move(['to' => $cwd . $new]);
     }
 
     /**
