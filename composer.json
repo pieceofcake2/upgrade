@@ -1,6 +1,6 @@
 {
     "name": "pieceofcake2/upgrade",
-    "description": "Upgrade plugin for CakePHP 2.x - Legacy upgrade tool",
+    "description": "Upgrade shell that converts CakePHP 1.3 applications to CakePHP 2",
     "type": "cakephp-plugin",
     "keywords": ["cakephp", "cakephp2", "upgrade"],
     "license": "MIT",
