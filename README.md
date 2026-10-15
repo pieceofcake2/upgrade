@@ -12,6 +12,13 @@ The Upgrade plugin provides the `upgrade` console shell, which automates most of
 mechanical changes needed to upgrade a CakePHP 1.3 application to CakePHP 2 on
 [pieceofcake2/cakephp](https://github.com/pieceofcake2/cakephp).
 
+## Documentation
+
+- Website: https://pieceofcake2.github.io/upgrade/
+- Markdown: [docs/README.md](docs/README.md) (for AI tools and offline reading)
+
+The Markdown documentation is also included in the Composer package, in the plugin's directory: `plugins/Upgrade/docs/README.md` (the location depends on your `installer-paths`). Install the package with `--dev` if you only need it for development.
+
 ## Requirements
 
 - PHP 8.0+
@@ -25,10 +32,6 @@ composer require --dev pieceofcake2/upgrade
 
 Then load the plugin with `CakePlugin::load('Upgrade')` and run `bin/cake upgrade all`
 (legacy layout: `app/Console/cake upgrade all`). Back up your application first.
-
-## Documentation
-
-Documentation: https://pieceofcake2.github.io/upgrade/
 
 ## Contributing
 
