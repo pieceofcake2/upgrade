@@ -34,7 +34,7 @@ composer require --dev pieceofcake2/upgrade
 | レガシー (`app/Config/`、`app/Plugin/`) | `"app/Plugin/{$name}/": ["type:cakephp-plugin"]` |
 
 プラグインは `config/bootstrap.php` (レガシー構成では `app/Config/bootstrap.php`) で読み込みます。
-すでに `CakePlugin::loadAll()` を使っている場合は必要ありません:
+すでに `CakePlugin::loadAll()` を使っている場合は必要ありません。
 
 ```php
 CakePlugin::load('Upgrade');
@@ -106,8 +106,10 @@ pieceofcake2/cakephp は、CakePHP 5 スタイルの構成 (`config/`、`src/`�
 
 ## 由来
 
-このパッケージは、[cakephp/cakephp](https://github.com/cakephp/cakephp) (Packagist では `cakephp/cakephp`、
-最後のアップストリームのバージョンは 2.10.24) の `upgrade` コンソールシェルを元にしており、元々は CakePHP コミュニティ
-(Cake Software Foundation, Inc.) によるものです。これを別のパッケージとして切り出し、モダンな PHP で動く CakePHP 2 のために
-[pieceofcake2](https://github.com/pieceofcake2) がメンテナンスしています。元のコードからの変更点は
-[コミット履歴](https://github.com/pieceofcake2/upgrade/commits/1.x) をご覧ください。
+このパッケージは [cakephp/cakephp](https://github.com/cakephp/cakephp) (Packagist では
+`cakephp/cakephp`、アップストリームの最終バージョンは 2.10.24) の `upgrade` コンソールシェルをもとに別のパッケージとして切り出したもので、
+元の作者は CakePHP コミュニティ (Cake Software Foundation, Inc.) です。
+[pieceofcake2](https://github.com/pieceofcake2) が、モダンな PHP で動く CakePHP 2 向けに
+メンテナンスしています。オリジナルからの変更点は
+[コミット履歴](https://github.com/pieceofcake2/upgrade/commits/1.x)
+で確認できます。
