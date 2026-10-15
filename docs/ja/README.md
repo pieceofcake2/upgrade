@@ -109,5 +109,5 @@ pieceofcake2/cakephp は、CakePHP 5 スタイルの構成 (`config/`、`src/`�
 このパッケージは、[cakephp/cakephp](https://github.com/cakephp/cakephp) (Packagist では `cakephp/cakephp`、
 最後のアップストリームのバージョンは 2.10.24) の `upgrade` コンソールシェルを元にしており、元々は CakePHP コミュニティ
 (Cake Software Foundation, Inc.) によるものです。これを別のパッケージとして切り出し、モダンな PHP で動く CakePHP 2 のために
-[pieceofcake2](https://github.com/pieceofcake2) が保守しています。元のコードからの変更点は
+[pieceofcake2](https://github.com/pieceofcake2) がメンテナンスしています。元のコードからの変更点は
 [コミット履歴](https://github.com/pieceofcake2/upgrade/commits/1.x) をご覧ください。
