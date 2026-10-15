@@ -18,7 +18,7 @@ CakePHP 2 にアップグレードするために必要な機械的な変更の�
 
 ## インストール
 
-[Composer](https://getcomposer.org/) で、開発用の依存パッケージとしてプラグインをインストールします:
+[Composer](https://getcomposer.org/) で、開発用の依存パッケージとしてプラグインをインストールします。
 
 ```bash
 composer require --dev pieceofcake2/upgrade
@@ -26,7 +26,7 @@ composer require --dev pieceofcake2/upgrade
 
 このプラグインは `cakephp-plugin` タイプなので、`composer/installers` によってプラグインのディレクトリに
 インストールされます。正しい場所にインストールされるように、アプリケーションの `composer.json` で
-`installer-paths` を設定してください:
+`installer-paths` を設定してください。
 
 | 構成 | `installer-paths` |
 | --- | --- |
@@ -44,7 +44,7 @@ CakePlugin::load('Upgrade');
 
 ## シェルの実行
 
-`bin/cake` (レガシー構成では `app/Console/cake`) でシェルを実行します:
+`bin/cake` (レガシー構成では `app/Console/cake`) でシェルを実行します。
 
 ```bash
 # Run all upgrade commands
@@ -110,4 +110,4 @@ pieceofcake2/cakephp は、CakePHP 5 スタイルの構成 (`config/`、`src/`�
 最後のアップストリームのバージョンは 2.10.24) の `upgrade` コンソールシェルを元にしており、元々は CakePHP コミュニティ
 (Cake Software Foundation, Inc.) によるものです。これを別のパッケージとして切り出し、モダンな PHP で動く CakePHP 2 のために
 [pieceofcake2](https://github.com/pieceofcake2) が保守しています。元のコードからの変更点は
-[コミット履歴](https://github.com/pieceofcake2/upgrade/commits/1.x) を参照してください。
+[コミット履歴](https://github.com/pieceofcake2/upgrade/commits/1.x) をご覧ください。
