@@ -93,3 +93,12 @@ convert automatically.
 pieceofcake2/cakephp also supports a CakePHP 5-style layout (`config/`, `src/`,
 `templates/`). To move the upgraded application to it, follow the file migration map of the
 [pieceofcake2/app](https://github.com/pieceofcake2/app) skeleton.
+
+## Origin
+
+This package is based on the `upgrade` console shell of
+[cakephp/cakephp](https://github.com/cakephp/cakephp) (`cakephp/cakephp` on Packagist, last upstream
+version 2.10.24), originally by the CakePHP community (Cake Software Foundation, Inc.). It was
+extracted into a separate package and is maintained for CakePHP 2 on modern PHP by
+[pieceofcake2](https://github.com/pieceofcake2). Changes from the original are listed in the
+[commit history](https://github.com/pieceofcake2/upgrade/commits/1.x).
