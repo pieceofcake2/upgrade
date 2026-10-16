@@ -34,7 +34,7 @@ class UpgradeShellTestOutput extends ConsoleOutput
      * @param string $message Message to write.
      * @return int
      */
-    protected function _write($message)
+    protected function _write($message): int
     {
         $this->output .= $message;
 
@@ -160,7 +160,7 @@ class UpgradeShellTest extends CakeTestCase
      * @param array $options Extra CLI options.
      * @return mixed
      */
-    protected function _run(string $command, array $options = [])
+    protected function _run(string $command, array $options = []): mixed
     {
         $argv = array_merge([$command, '--plugin', self::PLUGIN], $options);
 
