@@ -35,7 +35,7 @@ Then load the plugin with `CakePlugin::load('Upgrade')` and run `bin/cake upgrad
 (legacy layout: `app/Console/cake upgrade all`). Back up your application first.
 
 `bin/cake upgrade rector` runs the [Rector](https://getrector.com/) rules of the plugin for a change of
-pieceofcake2/cakephp, e.g. `--rules variadic-arguments src tests`. See [Rector Rules](docs/README.md#rector-rules).
+pieceofcake2/cakephp, e.g. `--rules variadic-arguments src tests` or `--rules namespaced-classes src tests`. See [Rector Rules](docs/README.md#rector-rules).
 
 ## Contributing
 

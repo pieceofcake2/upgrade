@@ -147,6 +147,50 @@ class AppModel extends Model
 - 可変長引数の名前は CakePHP と同じにします。メソッドにすでに同じ名前の引数や変数がある場合は、別の名前にします。
 - 変更したコードは、この変更の前の pieceofcake2/cakephp でも動くので、更新する前にルールを適用できます。
 
+### `namespaced-classes`
+
+CakePHP 2.13 からは、pieceofcake2/cakephp のクラスは `Cake` 名前空間にあり (例: `Cake\Controller\Controller`)、
+グローバルな名前は同じクラスの別名です。グローバルな名前はそのまま使えるので、このルールは任意です。コードの
+グローバルな名前を `use` を付けた名前空間の名前に置き換え、`get_class()` で動かなくなるクラス名の比較を直します。
+
+```php
+// 変更前
+class PostsController extends AppController
+{
+    public function beforeFilter()
+    {
+        if (get_class($this->request) === 'CakeRequest') {
+            $email = new CakeEmail('default');
+        }
+    }
+}
+
+// 変更後
+use Cake\Network\CakeRequest;
+use Cake\Network\Email\CakeEmail;
+
+class PostsController extends AppController
+{
+    public function beforeFilter()
+    {
+        if (get_class($this->request) === CakeRequest::class) {
+            $email = new CakeEmail('default');
+        }
+    }
+}
+```
+
+- コードの中の CakePHP のクラス (`extends`、`new`、型宣言、静的呼び出し、`instanceof`、`catch`) には `use` を
+  付けます。docblock の中では完全修飾名になります (例: `@param \Cake\Controller\Controller`)。
+- CakePHP のクラスのグローバルな名前の文字列は、オブジェクトのクラスと比べている場合に `::class` に置き換えます。
+  対象は `get_class()`、`get_parent_class()`、`get_called_class()`、`$object::class`、`static::class` と、
+  `===`、`==`、`!==`、`!=`、`in_array()`、`switch`、`match` での比較です。`get_class($x) === 'CakeRequest'`
+  は前と同じクラスと比べます。`instanceof` はサブクラスにも一致するので使いません。
+- ほかの文字列 (`App::uses('Controller', 'Controller')` や、メソッドに渡す `'CakeRequest'`) と、アプリケーションや
+  プラグインのクラス (`AppController`、`AppModel`) はそのままです。
+- 変更したコードには pieceofcake2/cakephp 2.13 以降が必要です。そのあとでコードスタイルの修正ツールを実行して、
+  `use` を並べ替えてください。
+
 <a id="after-the-upgrade"></a>
 
 ## アップグレードの後で

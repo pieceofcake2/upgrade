@@ -529,6 +529,30 @@ PHP, $this->_read('Lib/Legacy.php'));
     }
 
     /**
+     * The rules of namespaced-classes, run by Rector on a copy of the fixtures
+     *
+     * @return void
+     */
+    public function testRectorNamespacedClasses(): void
+    {
+        $fixtures = dirname(__DIR__, 3) . DS . 'fixtures' . DS . 'rector' . DS;
+        $dir = $this->_root . 'rector' . DS;
+        new Folder($dir, true);
+        foreach (glob($fixtures . 'namespaced-classes' . DS . '*.php') ?: [] as $file) {
+            copy($file, $dir . basename($file));
+        }
+
+        ob_start();
+        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'namespaced-classes', $dir . 'PostsController.php']);
+        $output = (string)ob_get_clean();
+
+        $this->assertSame(0, $code, $output);
+        foreach (glob($fixtures . 'namespaced-classes-expected' . DS . '*.php') ?: [] as $expected) {
+            $this->assertFileEquals($expected, $dir . basename($expected));
+        }
+    }
+
+    /**
      * The command of Rector: the paths, the configuration of the rules and --dry-run
      *
      * @return void
@@ -573,7 +597,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         $this->Shell->params['rules'] = 'variadic-arguments';
         $this->Shell->rector();
 
-        $this->assertSame('Unknown rules: nothing. Available: variadic-arguments', $errors[0]);
+        $this->assertSame('Unknown rules: nothing. Available: namespaced-classes, variadic-arguments', $errors[0]);
         $this->assertSame('Give the paths to process, e.g. src tests.', $errors[1]);
     }
 }
