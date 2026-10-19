@@ -23,6 +23,7 @@ The Markdown documentation is also included in the Composer package, in the plug
 
 - PHP 8.0+
 - pieceofcake2/cakephp 2.12+
+- rector/rector 2.7+ (installed with the plugin), for the `rector` command
 
 ## Installation
 
@@ -32,6 +33,9 @@ composer require --dev pieceofcake2/upgrade
 
 Then load the plugin with `CakePlugin::load('Upgrade')` and run `bin/cake upgrade all`
 (legacy layout: `app/Console/cake upgrade all`). Back up your application first.
+
+`bin/cake upgrade rector` runs the [Rector](https://getrector.com/) rules of the plugin for a change of
+pieceofcake2/cakephp, e.g. `--rules variadic-arguments src tests`. See [Rector Rules](docs/README.md#rector-rules).
 
 ## Contributing
 

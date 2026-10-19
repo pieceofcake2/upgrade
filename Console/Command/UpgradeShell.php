@@ -16,6 +16,8 @@
  * @license       https://opensource.org/licenses/mit-license.php MIT License
  */
 
+use Composer\InstalledVersions;
+
 App::uses('AppShell', 'Console/Command');
 App::uses('Folder', 'Utility');
 App::uses('CakePlugin', 'Core');
@@ -70,10 +72,10 @@ class UpgradeShell extends AppShell
     public function startup()
     {
         parent::startup();
-        if ($this->params['dry-run']) {
+        if (!empty($this->params['dry-run'])) {
             $this->out(__d('cake_console', '<warning>Dry-run mode enabled!</warning>'), 1, Shell::QUIET);
         }
-        if ($this->params['git'] && !is_dir('.git')) {
+        if (!empty($this->params['git']) && !is_dir('.git')) {
             $this->out(__d('cake_console', '<warning>No git repository detected!</warning>'), 1, Shell::QUIET);
         }
     }
@@ -87,12 +89,85 @@ class UpgradeShell extends AppShell
     {
         foreach ($this->OptionParser->subcommands() as $command) {
             $name = $command->name();
-            if ($name === 'all') {
+            // rector is not a step of the upgrade from CakePHP 1.3
+            if ($name === 'all' || $name === 'rector') {
                 continue;
             }
             $this->out(__d('cake_console', 'Running %s', $name));
             $this->$name();
         }
+    }
+
+    /**
+     * Runs a set of Rector rules of `config/rector/` on the paths of the arguments, e.g.
+     * `rector --rules variadic-arguments src tests`
+     *
+     * @return int|null The exit code of Rector
+     */
+    public function rector()
+    {
+        $rules = (string)$this->params['rules'];
+        $available = $this->_rectorRules();
+        if (!in_array($rules, $available, true)) {
+            $this->error(__d('cake_console', 'Unknown rules: %s. Available: %s', $rules, implode(', ', $available)));
+
+            return null;
+        }
+        if (empty($this->args)) {
+            $this->error(__d('cake_console', 'Give the paths to process, e.g. src tests.'));
+
+            return null;
+        }
+        $command = [
+            PHP_BINARY,
+            InstalledVersions::getInstallPath('rector/rector') . DS . 'bin' . DS . 'rector',
+            'process',
+            ...$this->args,
+            '--config',
+            $this->_rectorConfig($rules),
+        ];
+        if (!empty($this->params['dry-run'])) {
+            $command[] = '--dry-run';
+        }
+
+        return $this->_runRector($command);
+    }
+
+    /**
+     * The sets of Rector rules of the plugin: the files of `config/rector/`
+     *
+     * @return array<string>
+     */
+    protected function _rectorRules()
+    {
+        $rules = array_map(static fn(string $file): string => basename($file, '.php'), glob($this->_rectorConfig('*')) ?: []);
+        sort($rules);
+
+        return $rules;
+    }
+
+    /**
+     * The configuration file of a set of Rector rules
+     *
+     * @param string $rules Name of the set
+     * @return string
+     */
+    protected function _rectorConfig($rules)
+    {
+        return dirname(__DIR__, 2) . DS . 'config' . DS . 'rector' . DS . $rules . '.php';
+    }
+
+    /**
+     * Runs Rector
+     *
+     * @param array<string> $command Command and its arguments
+     * @return int Exit code
+     */
+    protected function _runRector(array $command)
+    {
+        passthru(implode(' ', array_map('escapeshellarg', $command)), $code);
+
+        return $code;
     }
 
     /**
@@ -924,6 +999,22 @@ class UpgradeShell extends AppShell
             ])->addSubcommand('exceptions', [
             'help' => __d('cake_console', 'Replace use of cakeError with exceptions.'),
             'parser' => $subcommandParser,
+            ])->addSubcommand('rector', [
+            'help' => __d('cake_console', 'Run a set of Rector rules for a change of pieceofcake2/cakephp on the directories or files of the arguments, e.g. src tests. Not part of all.'),
+            'parser' => [
+                'options' => [
+                    'rules' => [
+                        'short' => 'r',
+                        'help' => __d('cake_console', 'The set of rules, a file of config/rector/ of the plugin.'),
+                        'default' => 'variadic-arguments',
+                    ],
+                    'dry-run' => [
+                        'short' => 'd',
+                        'help' => __d('cake_console', 'Show the changes without writing them.'),
+                        'boolean' => true,
+                    ],
+                ],
+            ],
             ]);
 
         return $parser;

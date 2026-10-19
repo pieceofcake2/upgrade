@@ -8,6 +8,7 @@ mechanical changes needed to upgrade a CakePHP 1.3 application to CakePHP 2. It 
 - [Running the Shell](#running-the-shell)
 - [Commands](#commands)
 - [Options](#options)
+- [Rector Rules](#rector-rules)
 - [After the Upgrade](#after-the-upgrade)
 
 > [!IMPORTANT]
@@ -74,6 +75,7 @@ with `--plugin`.
 | `controller_redirects` | Add `return` to `$this->redirect()` calls in controllers. |
 | `components` | Make components extend the `Component` class. |
 | `exceptions` | Replace `cakeError()` calls with exceptions. |
+| `rector` | Run a set of Rector rules for a change of pieceofcake2/cakephp. Not part of `all`: see [Rector Rules](#rector-rules). |
 
 ## Options
 
@@ -83,6 +85,60 @@ with `--plugin`.
 | `--ext`, `-e` | Extensions of the files to update: a pipe-delimited list or a `preg_match()` compatible subpattern (default: `php\|ctp\|thtml\|inc\|tpl`). |
 | `--git`, `-g` | Move files with `git mv`, so that Git keeps their history. The current directory must be a Git repository. |
 | `--dry-run`, `-d` | Show the changes without modifying any file. |
+
+## Rector Rules
+
+The `rector` command runs a set of [Rector](https://getrector.com/) rules on the directories or files that you
+give, for a change of pieceofcake2/cakephp that your code must follow. It is not part of `all`, which upgrades from
+CakePHP 1.3.
+
+```bash
+# See the changes
+bin/cake upgrade rector --rules variadic-arguments src tests --dry-run
+
+# Apply them
+bin/cake upgrade rector --rules variadic-arguments src tests
+```
+
+| Option | Description |
+| --- | --- |
+| `--rules`, `-r` | The set of rules, a file of `config/rector/` of the plugin (default: `variadic-arguments`). |
+| `--dry-run`, `-d` | Show the changes without modifying any file. |
+
+### `variadic-arguments`
+
+pieceofcake2/cakephp declares the variable arguments of some methods as variadic parameters instead of reading them
+with `func_get_args()`, e.g. `Model::query($sql, ...$params)` (see the UPGRADE of pieceofcake2/cakephp for the
+list). PHP refuses a method that overrides one of them with fewer parameters, so the rules add the same variadic
+parameter to the methods of your classes that override them:
+
+```php
+// Before
+class AppModel extends Model
+{
+    public function query($sql)
+    {
+        return parent::query(...func_get_args());
+    }
+}
+
+// After
+class AppModel extends Model
+{
+    public function query($sql, ...$params)
+    {
+        return parent::query($sql, ...$params);
+    }
+}
+```
+
+- `func_get_args()` becomes the list of the parameters when they are all required. With an optional parameter, it
+  stays: it leaves out the optional parameters that are not passed, so a list would pass their defaults instead.
+  It returns the same values with the variadic parameter.
+- The variadic parameter takes the name of CakePHP, or another one when the method already has a parameter or a
+  variable of that name.
+- The changed code also works with the versions of pieceofcake2/cakephp before the change, so you can run the rules
+  before you update.
 
 ## After the Upgrade
 

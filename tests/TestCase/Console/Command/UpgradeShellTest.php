@@ -174,7 +174,7 @@ class UpgradeShellTest extends CakeTestCase
 
         $this->assertSame([
             'all', 'tests', 'locations', 'i18n', 'helpers', 'basics', 'request',
-            'configure', 'constants', 'controller_redirects', 'components', 'exceptions',
+            'configure', 'constants', 'controller_redirects', 'components', 'exceptions', 'rector',
         ], $commands);
 
         $this->_write('README', '');
@@ -501,5 +501,79 @@ PHP, $this->_read('Lib/Legacy.php'));
         foreach (['tests', 'locations', 'i18n', 'helpers', 'basics', 'request', 'configure', 'constants', 'controller_redirects', 'components', 'exceptions'] as $command) {
             $this->assertStringContainsString('Running ' . $command, $this->out->output);
         }
+        $this->assertStringNotContainsString('Running rector', $this->out->output);
+    }
+
+    /**
+     * The rules of variadic-arguments, run by Rector on a copy of the fixtures
+     *
+     * @return void
+     */
+    public function testRector(): void
+    {
+        $fixtures = dirname(__DIR__, 3) . DS . 'fixtures' . DS . 'rector' . DS;
+        $dir = $this->_root . 'rector' . DS;
+        new Folder($dir, true);
+        foreach (glob($fixtures . 'variadic' . DS . '*.php') ?: [] as $file) {
+            copy($file, $dir . basename($file));
+        }
+
+        ob_start();
+        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'variadic-arguments', $dir . 'AppModel.php', $dir . 'Post.php', $dir . 'PostsController.php', $dir . 'Unrelated.php']);
+        $output = (string)ob_get_clean();
+
+        $this->assertSame(0, $code, $output);
+        foreach (glob($fixtures . 'variadic-expected' . DS . '*.php') ?: [] as $expected) {
+            $this->assertFileEquals($expected, $dir . basename($expected));
+        }
+    }
+
+    /**
+     * The command of Rector: the paths, the configuration of the rules and --dry-run
+     *
+     * @return void
+     */
+    public function testRectorCommand(): void
+    {
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', '_runRector'], [$this->out, $this->out, $this->getMock('ConsoleInput', [], [], '', false)]);
+        $commands = [];
+        $this->Shell->expects($this->once())->method('_runRector')->willReturnCallback(function (array $command) use (&$commands): int {
+            $commands[] = $command;
+
+            return 0;
+        });
+
+        $this->Shell->runCommand('rector', ['rector', 'src', 'tests', '--dry-run']);
+
+        $command = $commands[0];
+        $this->assertSame(PHP_BINARY, $command[0]);
+        $this->assertStringEndsWith(DS . 'bin' . DS . 'rector', $command[1]);
+        $this->assertSame(['process', 'src', 'tests', '--config'], array_slice($command, 2, 4));
+        $this->assertStringEndsWith(DS . 'config' . DS . 'rector' . DS . 'variadic-arguments.php', $command[6]);
+        $this->assertFileExists($command[6]);
+        $this->assertSame('--dry-run', $command[7]);
+    }
+
+    /**
+     * An unknown set of rules, or no path, is an error
+     *
+     * @return void
+     */
+    public function testRectorErrors(): void
+    {
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', '_runRector', 'error'], [$this->out, $this->out, $this->getMock('ConsoleInput', [], [], '', false)]);
+        $this->Shell->expects($this->never())->method('_runRector');
+        $errors = [];
+        $this->Shell->expects($this->exactly(2))->method('error')->willReturnCallback(function (string $message) use (&$errors): void {
+            $errors[] = $message;
+        });
+
+        $this->Shell->runCommand('rector', ['rector', '--rules', 'nothing', 'src']);
+        $this->Shell->args = [];
+        $this->Shell->params['rules'] = 'variadic-arguments';
+        $this->Shell->rector();
+
+        $this->assertSame('Unknown rules: nothing. Available: variadic-arguments', $errors[0]);
+        $this->assertSame('Give the paths to process, e.g. src tests.', $errors[1]);
     }
 }
