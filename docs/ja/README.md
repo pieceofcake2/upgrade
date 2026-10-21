@@ -190,10 +190,6 @@ class PostsController extends AppController
   プラグインのクラス (`AppController`、`AppModel`) はそのままです。
 - 変更したコードには pieceofcake2/cakephp 2.13 以降が必要です。そのあとでコードスタイルの修正ツールを実行して、
   `use` を並べ替えてください。
-- PHPStan を使っている場合は、pieceofcake2/cakephp 2.13 と一緒に pieceofcake2/phpstan-cakephp2 を `^1.1` に更新して
-  ください (`composer require --dev pieceofcake2/phpstan-cakephp2:^1.1`)。バージョン 1.0 は名前空間のあるコアの
-  コンポーネント、モデル、タスク、ビヘイビアを解決できず、`Call to an undefined method Cake\Controller\Component::paginate()`
-  のようなエラーを出します。
 
 <a id="after-the-upgrade"></a>
 
