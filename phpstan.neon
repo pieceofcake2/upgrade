@@ -6,5 +6,6 @@ parameters:
     phpVersion: 80000
     paths:
         - Console
+        - src
     bootstrapFiles:
         - tests/bootstrap.php

@@ -8,6 +8,7 @@ CakePHP 2 にアップグレードするために必要な機械的な変更の�
 - [シェルの実行](#running-the-shell)
 - [コマンド](#commands)
 - [オプション](#options)
+- [Rector のルール](#rector-rules)
 - [アップグレードの後で](#after-the-upgrade)
 
 > [!IMPORTANT]
@@ -79,6 +80,7 @@ bin/cake upgrade locations
 | `controller_redirects` | コントローラーの `$this->redirect()` の呼び出しに `return` を追加します。 |
 | `components` | コンポーネントが `Component` クラスを継承するようにします。 |
 | `exceptions` | `cakeError()` の呼び出しを例外に置き換えます。 |
+| `rector` | pieceofcake2/cakephp の変更のための Rector のルールを適用します。`all` には含まれません。[Rector のルール](#rector-rules) を参照してください。 |
 
 <a id="options"></a>
 
@@ -90,6 +92,60 @@ bin/cake upgrade locations
 | `--ext`、`-e` | 更新するファイルの拡張子。パイプ区切りのリストか、`preg_match()` 互換のサブパターンで指定します (デフォルト: `php\|ctp\|thtml\|inc\|tpl`)。 |
 | `--git`、`-g` | Git が履歴を保持するように、`git mv` でファイルを移動します。カレントディレクトリは Git リポジトリである必要があります。 |
 | `--dry-run`、`-d` | ファイルを変更せずに変更内容を表示します。 |
+
+<a id="rector-rules"></a>
+
+## Rector のルール
+
+`rector` コマンドは、指定したディレクトリやファイルに [Rector](https://getrector.com/) のルールを適用します。
+pieceofcake2/cakephp の変更に、アプリケーションのコードを合わせるためのものです。CakePHP 1.3 からのアップグレード
+である `all` には含まれません。
+
+```bash
+# 変更を確認する
+bin/cake upgrade rector --rules variadic-arguments src tests --dry-run
+
+# 適用する
+bin/cake upgrade rector --rules variadic-arguments src tests
+```
+
+| オプション | 説明 |
+| --- | --- |
+| `--rules`、`-r` | ルールのセット。プラグインの `config/rector/` のファイルです (デフォルト: `variadic-arguments`)。 |
+| `--dry-run`、`-d` | ファイルを変更せずに、変更の内容を表示します。 |
+
+### `variadic-arguments`
+
+pieceofcake2/cakephp は、いくつかのメソッドの可変長の引数を、`func_get_args()` で読む代わりに可変長引数として
+宣言します (例: `Model::query($sql, ...$params)`。一覧は pieceofcake2/cakephp の UPGRADE を参照してください)。
+PHP は、これらを上書きするメソッドの引数が少ないとエラーにするため、このルールは、アプリケーションのクラスで
+これらを上書きしているメソッドに、同じ可変長引数を追加します。
+
+```php
+// 変更前
+class AppModel extends Model
+{
+    public function query($sql)
+    {
+        return parent::query(...func_get_args());
+    }
+}
+
+// 変更後
+class AppModel extends Model
+{
+    public function query($sql, ...$params)
+    {
+        return parent::query($sql, ...$params);
+    }
+}
+```
+
+- `func_get_args()` は、引数がすべて必須のときは引数の並びに置き換えます。省略できる引数がある場合はそのまま
+  残します。`func_get_args()` は渡されなかった省略可能な引数を含まないため、並びに置き換えるとデフォルト値を
+  渡すことになるからです。可変長引数を追加しても、`func_get_args()` は同じ値を返します。
+- 可変長引数の名前は CakePHP と同じにします。メソッドにすでに同じ名前の引数や変数がある場合は、別の名前にします。
+- 変更したコードは、この変更の前の pieceofcake2/cakephp でも動くので、更新する前にルールを適用できます。
 
 <a id="after-the-upgrade"></a>
 
