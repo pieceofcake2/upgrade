@@ -140,6 +140,51 @@ class AppModel extends Model
 - The changed code also works with the versions of pieceofcake2/cakephp before the change, so you can run the rules
   before you update.
 
+### `namespaced-classes`
+
+Since CakePHP 2.13, the classes of pieceofcake2/cakephp are in the `Cake` namespace, e.g.
+`Cake\Controller\Controller`, and their global names are aliases of the same classes. The global names keep
+working, so these rules are optional: they replace the global names in your code by the namespaced names, with
+`use` statements, and fix the comparisons of class names that `get_class()` breaks:
+
+```php
+// Before
+class PostsController extends AppController
+{
+    public function beforeFilter()
+    {
+        if (get_class($this->request) === 'CakeRequest') {
+            $email = new CakeEmail('default');
+        }
+    }
+}
+
+// After
+use Cake\Network\CakeRequest;
+use Cake\Network\Email\CakeEmail;
+
+class PostsController extends AppController
+{
+    public function beforeFilter()
+    {
+        if (get_class($this->request) === CakeRequest::class) {
+            $email = new CakeEmail('default');
+        }
+    }
+}
+```
+
+- The classes of CakePHP in code (`extends`, `new`, type declarations, static calls, `instanceof`, `catch`) get a
+  `use` statement; in docblocks they become fully qualified names, e.g. `@param \Cake\Controller\Controller`.
+- A string with the global name of a class of CakePHP is replaced by `::class` when it is compared with the class of
+  an object: `get_class()`, `get_parent_class()`, `get_called_class()`, `$object::class` or `static::class`, with
+  `===`, `==`, `!==`, `!=`, `in_array()`, `switch` or `match`. `get_class($x) === 'CakeRequest'` then compares the
+  same class as before; `instanceof` would also match the subclasses, so it is not used.
+- Other strings (`App::uses('Controller', 'Controller')`, `'CakeRequest'` passed to a method) and the classes of
+  your application and of plugins (`AppController`, `AppModel`) are left as they are.
+- The changed code needs pieceofcake2/cakephp 2.13 or later. Run your code style fixer afterwards to sort the `use`
+  statements.
+
 ## After the Upgrade
 
 The shell creates the CakePHP 2 directory layout that uses `app/Config/`, `app/Controller/`,
