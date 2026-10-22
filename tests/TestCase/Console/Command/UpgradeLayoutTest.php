@@ -30,9 +30,29 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('Move app/View/Layouts/Emails/html/default.ctp to templates/layout/email/html/default.php', $output);
         $this->assertStringContainsString('Move app/View/Posts/view.thtml to templates/Posts/view.php', $output);
         $this->assertStringContainsString('extra.installer-paths: app/Plugin/{$name}/ => plugins/{$name}/', $output);
-        // What stays in app/, and what to copy from pieceofcake2/app
-        $this->assertStringContainsString('Not moved, move or replace them by hand: app/.htaccess, app/Console/cake, app/Console/cake.php, app/Vendor.', $output);
-        $this->assertStringContainsString('Copy config/define.php, bin/cake, webroot/index.php and webroot/test.php from pieceofcake2/app', $output);
+        // The entry files of pieceofcake2/app, with the constants of the application of the old ones
+        foreach (['config/define.php', 'bin/cake', 'webroot/index.php', 'webroot/test.php', 'webroot/.htaccess'] as $file) {
+            $this->assertStringContainsString('Create ' . $file . ' of pieceofcake2/app', $output);
+        }
+        $this->assertFileEquals(dirname(__DIR__, 4) . '/resources/skeleton/webroot/index.php', $app . '/webroot/index.php');
+        $this->assertTrue(is_executable($app . '/bin/cake'));
+        $this->assertStringContainsString('Keep the constant SITE_NAME of app/webroot/index.php in config/define.php', $output);
+        $this->assertStringContainsString('Keep the constant CONSOLE_USER of app/Console/cake.php in config/define.php', $output);
+        $this->assertStringContainsString("// Kept from app/webroot/index.php\nif (!defined('SITE_NAME')) {\n    define('SITE_NAME', 'Acme Blog');\n}\n", (string)file_get_contents($app . '/config/define.php'));
+        $this->assertStringContainsString('app/webroot/index.php defines UPLOADS from its own path', $output);
+        $this->assertStringNotContainsString('CAKE_CORE_INCLUDE_PATH', (string)file_get_contents($app . '/config/define.php'));
+        // Outside Git, the old entry files stay to be compared
+        $this->assertStringContainsString('Delete app/webroot/index.php, app/webroot/test.php, app/Console/cake, app/Console/cake.php, app/Console/cake.bat, which the files of pieceofcake2/app replace', $output);
+        foreach (['tmp/cache/models', 'tmp/cache/views', 'tmp/sessions', 'tmp/tests'] as $dir) {
+            $this->assertStringContainsString('Create the directory ' . $dir, $output);
+            $this->assertDirectoryExists($app . '/' . $dir);
+        }
+        $this->assertStringNotContainsString('Create the directory tmp/cache/persistent', $output);
+        // app/Vendor/ to vendors/, and what stays in app/
+        $this->assertStringContainsString('Move app/Vendor to vendors', $output);
+        $this->assertFileExists($app . '/vendors/markdown.php');
+        $this->assertStringContainsString('Not moved, move or replace them by hand: app/.htaccess.', $output);
+        $this->assertStringContainsString('.htaccess leads to app/webroot/, which moved to webroot/', $output);
         $this->assertStringContainsString('remove the $ext = \'.thtml\'', $output);
         $this->assertStringContainsString('Not a Git repository', $output);
         $this->assertSame([], $this->_errors);
@@ -123,7 +143,52 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('Move app/Test/Case to tests/TestCase', $output);
         $this->assertStringContainsString('Move app/tmp/logs to logs', $output);
         $this->assertStringContainsString('autoload.classmap: app/Controller/ => src/Controller/', $output);
+        $this->assertStringContainsString('Create bin/cake of pieceofcake2/app', $output);
+        $this->assertStringContainsString('Keep the constant SITE_NAME of app/webroot/index.php', $output);
         $this->assertStringNotContainsString('Not a Git repository', $output);
+    }
+
+    /**
+     * The entry files that exist are not overwritten, and the constants of the old files are then listed
+     *
+     * @return void
+     */
+    public function testExistingEntryFiles(): void
+    {
+        $app = $this->_copy('legacy-app', 'app');
+        mkdir($app . '/bin');
+        mkdir($app . '/config');
+        file_put_contents($app . '/bin/cake', 'mine');
+        file_put_contents($app . '/config/define.php', '<?php // mine');
+
+        $this->_run($app, ['layout']);
+
+        $this->assertSame('mine', file_get_contents($app . '/bin/cake'));
+        $this->assertSame('<?php // mine', file_get_contents($app . '/config/define.php'));
+        $this->assertStringNotContainsString('Create bin/cake', $this->out->output);
+        $this->assertStringContainsString('Create webroot/index.php of pieceofcake2/app', $this->out->output);
+        $this->assertStringContainsString('config/define.php exists, so these constants of the old entry files were not added to it: SITE_NAME, CONSOLE_USER.', $this->out->output);
+        // app/Config/ merged into config/
+        $this->assertFileExists($app . '/config/core.php');
+    }
+
+    /**
+     * An application in the new layout gets the entry files that it misses
+     *
+     * @return void
+     */
+    public function testMissingEntryFiles(): void
+    {
+        $app = $this->_copy('app', 'app');
+        unlink($app . '/bin/cake');
+        unlink($app . '/webroot/test.php');
+
+        $this->_run($app, ['layout']);
+
+        $this->assertStringContainsString('Create bin/cake of pieceofcake2/app', $this->out->output);
+        $this->assertStringContainsString('Create webroot/test.php of pieceofcake2/app', $this->out->output);
+        $this->assertStringNotContainsString('Create config/define.php', $this->out->output);
+        $this->assertFileEquals(dirname(__DIR__, 4) . '/resources/skeleton/bin/cake', $app . '/bin/cake');
     }
 
     /**
@@ -140,6 +205,10 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
             $this->markTestSkipped('git is not available');
         }
         exec('git -C ' . escapeshellarg($app) . ' add -A -- . ":!app/tmp"');
+        // A commit of the test repository, so that git rm removes the files without changes
+        exec('git -C ' . escapeshellarg($app) . ' -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m Legacy');
+        // A change that is not committed: the file stays
+        file_put_contents($app . '/app/Console/cake.bat', 'changed');
 
         $this->_run($app, ['layout']);
 
@@ -153,6 +222,15 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertFileExists($app . '/tmp/cache/persistent/empty');
         $this->assertNotContains('tmp/cache/persistent/empty', $files);
         $this->assertStringNotContainsString('Not a Git repository', $this->out->output);
+        // The old entry files are removed with git rm, Git keeps them in its history
+        foreach (['app/webroot/index.php', 'app/webroot/test.php', 'app/Console/cake', 'app/Console/cake.php'] as $file) {
+            $this->assertStringContainsString('Remove ' . $file . ', which the files of pieceofcake2/app replace', $this->out->output);
+            $this->assertNotContains($file, $files);
+            $this->assertFileDoesNotExist($app . '/' . $file);
+        }
+        $this->assertFileExists($app . '/webroot/index.php');
+        $this->assertSame('changed', file_get_contents($app . '/app/Console/cake.bat'));
+        $this->assertStringContainsString('Delete app/Console/cake.bat, which the files of pieceofcake2/app replace', $this->out->output);
     }
 
     /**

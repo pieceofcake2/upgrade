@@ -11,8 +11,9 @@ use RecursiveIteratorIterator;
  * The moves of `bin/cake upgrade layout`, from the CakePHP 2 layout to the layout of pieceofcake2/app.
  *
  * - An application: `app/Config/` to `config/`, the classes to `src/`, the templates to `templates/`, `app/Locale/` to
- *   `resources/locales/`, `app/Test/` to `tests/`, `app/Plugin/` to `plugins/`, `app/webroot/` to `webroot/`,
- *   `app/tmp/` to `tmp/` and `app/tmp/logs/` to `logs/`.
+ *   `resources/locales/`, `app/Test/` to `tests/`, `app/Plugin/` to `plugins/`, `app/Vendor/` to `vendors/`,
+ *   `app/webroot/` to `webroot/`, `app/tmp/` to `tmp/` and `app/tmp/logs/` to `logs/`. The entry files of
+ *   pieceofcake2/app replace the ones of `app/` (see EntryFiles).
  * - A plugin: only `Config/`, the templates of `View/`, `Locale/` and `Test/`. Its `src/` holds namespaced classes
  *   only, so the class folders move into `src/` with `bin/cake upgrade namespace`.
  * - The templates (in both): `.ctp` and `.thtml` become `.php`, and `Layouts/`, `Elements/`, `Emails/` and `Errors/`
@@ -53,6 +54,13 @@ final class LayoutPlan
     public array $notices = [];
 
     /**
+     * The entry files of the layout of pieceofcake2/app to create (applications only)
+     *
+     * @var \PieceOfCake2\Upgrade\Migration\EntryFiles|null
+     */
+    public ?EntryFiles $entryFiles = null;
+
+    /**
      * Whether `.thtml` templates are renamed
      *
      * @var bool
@@ -80,6 +88,15 @@ final class LayoutPlan
             $plan->planApplication($app);
         }
         $plan->planTemplates($root . DIRECTORY_SEPARATOR . 'templates', $root . DIRECTORY_SEPARATOR . 'templates');
+        $moves = [];
+        foreach ($plan->moves as [$from, $to]) {
+            $moves[] = [
+                str_replace(DIRECTORY_SEPARATOR, '/', substr($from, strlen($root) + 1)),
+                str_replace(DIRECTORY_SEPARATOR, '/', substr($to, strlen($root) + 1)),
+            ];
+        }
+        $plan->entryFiles = EntryFiles::plan($root, $moves);
+        $plan->notices = array_merge($plan->notices, $plan->entryFiles->notices);
         $plan->finish();
 
         return $plan;
@@ -127,11 +144,38 @@ final class LayoutPlan
             }
         }
         $this->paths += ['app/Plugin' => 'plugins'];
-        $this->add('app/webroot', 'webroot');
+        // The hand-copied libraries go to vendors/, which App::import('Vendor') reads and Composer does not manage
+        $this->add('app/Vendor', 'vendors');
+        // The front controllers of app/webroot/ are replaced by the ones of pieceofcake2/app (see EntryFiles)
+        foreach (Paths::entries($app . DIRECTORY_SEPARATOR . 'webroot') as $entry) {
+            if (!in_array('app/webroot/' . $entry, EntryFiles::OLD_FILES, true)) {
+                $this->add('app/webroot/' . $entry, 'webroot/' . $entry);
+            }
+        }
+        $this->paths += ['app/webroot' => 'webroot'];
         $this->add('app/tmp/logs', 'logs');
         $this->add('app/tmp', 'tmp');
 
-        $moved = ['Config', 'Controller', 'Model', 'Lib', 'View', 'Locale', 'Test', 'webroot', 'tmp'];
+        $left = $this->leftIn($app);
+        if ($left !== []) {
+            $this->notices[] = sprintf('Not moved, move or replace them by hand: %s.', implode(', ', $left));
+        }
+        if (Paths::hasDirectory($app, 'Vendor')) {
+            $this->notices[] = 'app/Vendor/ moved to vendors/, where App::import(\'Vendor\', ...) finds the files. ' .
+                'Install the libraries with Composer instead when they have a package.';
+        }
+        $this->rootNotices();
+    }
+
+    /**
+     * The files of `app/` that do not move, but the entry files that EntryFiles replaces
+     *
+     * @param string $app The directory `app/`
+     * @return array<string> Paths relative to the root
+     */
+    private function leftIn(string $app): array
+    {
+        $moved = ['Config', 'Controller', 'Model', 'Lib', 'View', 'Locale', 'Test', 'Vendor', 'webroot', 'tmp'];
         $left = [];
         foreach (Paths::entries($app) as $entry) {
             if (in_array($entry, $moved, true)) {
@@ -146,7 +190,7 @@ final class LayoutPlan
             }
             if ($entry === 'Console') {
                 foreach (Paths::entries($app . DIRECTORY_SEPARATOR . 'Console') as $file) {
-                    if (!in_array($file, ['Command', 'Templates'], true)) {
+                    if (!in_array($file, ['Command', 'Templates'], true) && !in_array('app/Console/' . $file, EntryFiles::OLD_FILES, true)) {
                         $left[] = 'app/Console/' . $file;
                     }
                 }
@@ -154,15 +198,27 @@ final class LayoutPlan
             }
             $left[] = 'app/' . $entry;
         }
-        if ($left !== []) {
-            $this->notices[] = sprintf(
-                'Not moved, move or replace them by hand: %s. Use Composer for the files of app/Vendor/, and the ' .
-                'bin/cake of pieceofcake2/app for app/Console/cake.',
-                implode(', ', $left),
-            );
+
+        return $left;
+    }
+
+    /**
+     * Lists the files in the root of the project that lead to `app/webroot/`
+     *
+     * @return void
+     */
+    private function rootNotices(): void
+    {
+        foreach (['index.php', '.htaccess'] as $file) {
+            $path = $this->root . DIRECTORY_SEPARATOR . $file;
+            if (is_file($path) && str_contains((string)file_get_contents($path), 'app/webroot')) {
+                $this->notices[] = sprintf(
+                    '%s leads to app/webroot/, which moved to webroot/: set the document root of the web server to ' .
+                    'webroot/, then delete it.',
+                    $file,
+                );
+            }
         }
-        $this->notices[] = 'Copy config/define.php, bin/cake, webroot/index.php and webroot/test.php from ' .
-            'pieceofcake2/app: the files of app/ define the paths of the CakePHP 2 layout.';
     }
 
     /**

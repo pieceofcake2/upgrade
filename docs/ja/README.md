@@ -285,7 +285,6 @@ bin/cake upgrade rector --rules class-name-strings src tests config
 # 1. CakePHP 2 の構成 (app/Config/、app/Controller/、app/View/ など) を config/、src/、templates/ などに移す
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
-# config/define.php、bin/cake、webroot/index.php、webroot/test.php を pieceofcake2/app からコピーする
 composer dump-autoload
 
 # 2. クラスを App 名前空間に移す
@@ -321,7 +320,24 @@ composer dump-autoload
 | `app/Locale/` | `resources/locales/` |
 | `app/Test/Case/`、`app/Test/Fixture/` | `tests/TestCase/`、`tests/Fixture/` |
 | `app/Plugin/<Name>/` | `plugins/<Name>/` |
-| `app/webroot/`、`app/tmp/logs/`、`app/tmp/` | `webroot/`、`logs/`、`tmp/` |
+| `app/Vendor/` | `vendors/` (`App::import('Vendor', ...)` が手でコピーしたライブラリを探す場所で、Composer は管理しません) |
+| `app/webroot/` (`index.php` と `test.php` を除く)、`app/tmp/logs/`、`app/tmp/` | `webroot/`、`logs/`、`tmp/` |
+
+CakePHP 2 の構成のエントリーファイルはその構成のパスを定義しているので、pieceofcake2/app のエントリーファイルに
+置き換えます。`config/define.php`、`bin/cake`、`webroot/index.php`、`webroot/test.php`、`webroot/.htaccess` と
+`tmp/`・`logs/` のディレクトリは、なければ作成します (すでに新しい構成のアプリケーションでも同じです)。これらの
+ファイルは pieceofcake2/app のファイルのコピーとしてこのプラグインの `resources/skeleton/` にあるので、
+pieceofcake2/app のバージョンには左右されません。既存のファイルを上書きすることはありません。
+
+- 古いエントリーファイル (`app/webroot/index.php`、`app/webroot/test.php`、`app/Console/cake.php`) で定義している
+  アプリケーション独自の定数 (例: `define('SITE_NAME', 'Blog')`) は、すべてのエントリーファイルが読み込む新しい
+  `config/define.php` に追加します。CakePHP 2 の定数 (`ROOT`、`APP_DIR`、`WEBROOT_DIR`、`WWW_ROOT`、
+  `CAKE_CORE_INCLUDE_PATH` など) は追加しません。新しいファイルが新しい構成に合わせて定義し、コアは Composer が
+  読み込むからです。古いファイルのパス (`__FILE__`、`__DIR__`) から作る定数は、`ROOT` から定義し直せるよう一覧で
+  表示します。
+- Git リポジトリでは、古いエントリーファイル (`app/webroot/index.php`、`app/webroot/test.php`、`app/Console/cake`、
+  `cake.php`、`cake.bat`) を `git rm` で削除します。Git の履歴には残ります。コミットしていない変更があるファイルは
+  Git が削除を拒むので、そのまま残ります。Git リポジトリでなければ、比べてから削除できるように残します。
 
 プラグインの `src/` には名前空間付きのクラスだけを置くので、プラグインのクラスはこの段階では移しません
 (`namespace` で `src/` に移ります)。`Config/` は `config/` に、`View/` のテンプレートは `templates/` に、
@@ -342,12 +358,11 @@ composer dump-autoload
 
 コマンドが一覧で示す、手で行う作業は次のとおりです。
 
-- `config/define.php`、`bin/cake`、`webroot/index.php`、`webroot/test.php` を pieceofcake2/app からコピーします。
-  `app/` のこれらのファイルは CakePHP 2 の構成のパスを定義しているからです。古いファイルに加えた変更は、新しい
-  ファイルに移してください。
-- 移動しないファイル: `app/Vendor/` (これらのライブラリは Composer でインストールしてください)、
-  `app/Console/cake` と `app/Console/cake.php` (`bin/cake` に置き換わります)、`app/index.php`、`app/.htaccess`
-  など、`app/` に残るファイルです。
+- 古いエントリーファイルに定数以外の独自のコードがあれば、新しいファイルと比べて移してください。
+- Web サーバーのドキュメントルートを `webroot/` にしてください。プロジェクトのルートにある、`app/webroot/` に
+  つなぐ `index.php` や `.htaccess` は一覧で表示します。
+- 移動しないファイル: `app/index.php`、`app/.htaccess` など、`app/` に残るファイルです。`vendors/` の
+  ライブラリは、パッケージがあれば Composer でインストールしてください。
 - `.thtml` のテンプレートを `.php` にした場合は、コントローラーやビューの `$ext = '.thtml'` を削除します。
 - コードの中のパス (`APP . 'Config' . DS`、`App::build()`)、Web サーバーの設定、`.gitignore` (`app/tmp/`)、
   デプロイの設定にあるパスは変更しません。

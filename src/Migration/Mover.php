@@ -93,6 +93,34 @@ final class Mover
     }
 
     /**
+     * Whether a file can be removed with `git rm`, so that Git keeps it in its history
+     *
+     * @param string $path The absolute path
+     * @return bool
+     */
+    public function canRemove(string $path): bool
+    {
+        return is_file($path) && $this->usesGit() && $this->isTracked($path);
+    }
+
+    /**
+     * Removes a file with `git rm`, if Git tracks it. Git refuses to remove a file with changes that it has not
+     * committed, so they are never lost.
+     *
+     * @param string $path The absolute path
+     * @return bool Whether it was removed
+     */
+    public function remove(string $path): bool
+    {
+        if (!$this->canRemove($path)) {
+            return false;
+        }
+        exec(sprintf('git -C %s rm -q -- %s 2>&1', escapeshellarg($this->root), escapeshellarg($path)), $output, $code);
+
+        return $code === 0;
+    }
+
+    /**
      * Removes a directory if it holds no files, and its empty subdirectories
      *
      * @param string $dir The directory

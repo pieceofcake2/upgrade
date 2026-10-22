@@ -9,7 +9,10 @@
   `app/View/`, ...) to the layout of pieceofcake2/app (`config/`, `src/`, `templates/`, `resources/locales/`,
   `tests/`, `plugins/`, `webroot/`), or the configuration, templates, translations and tests of a plugin
   (`--plugin`). The templates become `.php` in the CakePHP 5 directories (`layout/`, `element/`, `email/`, `Error/`),
-  and the paths of `composer.json` follow the moves. Files move with `git mv` in a Git repository
+  `app/Vendor/` moves to `vendors/`, and the paths of `composer.json` follow the moves. Files move with `git mv` in a
+  Git repository. The missing entry files of pieceofcake2/app (`config/define.php`, `bin/cake`, `webroot/index.php`,
+  `webroot/test.php`, `webroot/.htaccess`) are created from the copies in `resources/skeleton/`, with the constants
+  of the application of the old entry files, which are removed with `git rm`
 - New `namespace` command: moves the classes of an application (`App`, or `--namespace`) or of a plugin (its name)
   into a namespace. It moves the class folders of a plugin into `src/`, `src/Lib/<Type>/` to `src/<Type>/` and core
   class overrides to `src/Cake/<path>`, declares the namespaces from the paths, renames and imports the classes,
@@ -24,4 +27,4 @@
   `instanceof` when no class of CakePHP or of the processed code extends the class; otherwise it keeps `::class`, and
   the command lists the place for a review. The names in docblocks get `use` statements, as the names of the code,
   whichever version of pieceofcake2/cakephp is installed
-- Requires nikic/php-parser ^5.0, which `namespace` uses outside Rector
+- Requires nikic/php-parser ^5.0, which `layout` and `namespace` use outside Rector

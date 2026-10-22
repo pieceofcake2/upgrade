@@ -19,6 +19,7 @@
 use Composer\InstalledVersions;
 use PieceOfCake2\Upgrade\Migration\ComposerJson;
 use PieceOfCake2\Upgrade\Migration\CoreConfig;
+use PieceOfCake2\Upgrade\Migration\EntryFiles;
 use PieceOfCake2\Upgrade\Migration\HeaderFormatter;
 use PieceOfCake2\Upgrade\Migration\LayoutPlan;
 use PieceOfCake2\Upgrade\Migration\Mover;
@@ -237,22 +238,16 @@ class UpgradeShell extends AppShell
         $plan = $plugin ? LayoutPlan::forPlugin($root) : LayoutPlan::forApplication($root);
         $dryRun = !empty($this->params['dry-run']);
         $mover = new Mover($root);
-        if ($plan->moves === []) {
+        $entryFiles = $plan->entryFiles;
+        $nothing = $plan->moves === [] && ($entryFiles === null || ($entryFiles->files === [] && $entryFiles->directories === []));
+        if ($nothing) {
             $this->out(__d('cake_console', 'Nothing to move: %s is in the layout of pieceofcake2/app.', $plugin ?: $root));
         } elseif (!$dryRun && !$mover->usesGit()) {
             $this->out(__d('cake_console', '<warning>Not a Git repository: the files are moved with rename(), so Git does not see them as moves.</warning>'));
         }
-        foreach ($plan->moves as [$from, $to]) {
-            $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
-            if (!$dryRun) {
-                $mover->move($from, $to);
-            }
-        }
-        if (!$dryRun && $plan->moves !== []) {
-            $dirs = $plugin ? ['View', 'Locale', 'Test', 'templates'] : ['app', 'templates'];
-            foreach ($dirs as $dir) {
-                $mover->removeEmpty($root . DS . $dir);
-            }
+        $this->_move($plan, $mover, $dryRun, $plugin ? ['View', 'Locale', 'Test', 'templates'] : ['app', 'templates']);
+        if ($entryFiles !== null) {
+            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun);
         }
         $composer = $root . DS . 'composer.json';
         if (is_file($composer) && $plan->paths !== []) {
@@ -263,8 +258,97 @@ class UpgradeShell extends AppShell
             }
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
-        if ($plan->moves !== [] && !$dryRun) {
+        if (!$nothing && !$dryRun) {
             $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace%s` moves the classes into a namespace.', $plugin ? ' --plugin ' . $plugin : ''));
+        }
+    }
+
+    /**
+     * Makes the moves of the layout, then removes the directories that they left empty
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves the files
+     * @param bool $dryRun Whether to only show the moves
+     * @param array<string> $sources The directories that the moves empty, relative to the root
+     * @return void
+     */
+    protected function _move(LayoutPlan $plan, Mover $mover, $dryRun, array $sources)
+    {
+        foreach ($plan->moves as [$from, $to]) {
+            $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
+            if (!$dryRun) {
+                $mover->move($from, $to);
+            }
+        }
+        if ($dryRun || $plan->moves === []) {
+            return;
+        }
+        foreach ($sources as $dir) {
+            $mover->removeEmpty($plan->root . DS . $dir);
+        }
+    }
+
+    /**
+     * Creates the missing entry files and directories of the layout of pieceofcake2/app, and removes the entry files
+     * of the CakePHP 2 layout that they replace
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves and removes the files
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    {
+        foreach ($entryFiles->directories as $dir) {
+            $this->out(__d('cake_console', 'Create the directory %s', $dir));
+            if (!$dryRun && !is_dir($root . DS . $dir)) {
+                mkdir($root . DS . $dir, 0777, true);
+            }
+        }
+        foreach ($entryFiles->files as $file => $contents) {
+            $this->out(__d('cake_console', 'Create %s of pieceofcake2/app', $file));
+            $path = $root . DS . str_replace('/', DS, $file);
+            if ($dryRun || file_exists($path)) {
+                continue;
+            }
+            if (!is_dir(dirname($path))) {
+                mkdir(dirname($path), 0777, true);
+            }
+            file_put_contents($path, $contents);
+            if ($file === 'bin/cake') {
+                chmod($path, 0755);
+            }
+        }
+        foreach ($entryFiles->kept as $constant => $file) {
+            $this->out(__d('cake_console', 'Keep the constant %s of %s in config/define.php', $constant, $file));
+        }
+        $this->_removeOldEntryFiles($root, $entryFiles, $mover, $dryRun);
+    }
+
+    /**
+     * Removes the entry files of the CakePHP 2 layout with git rm; outside Git, or with changes that are not
+     * committed, they stay and are listed
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Removes the files
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _removeOldEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    {
+        $left = [];
+        foreach ($entryFiles->oldFiles as $file) {
+            $path = $root . DS . str_replace('/', DS, $file);
+            if ($dryRun ? $mover->canRemove($path) : $mover->remove($path)) {
+                $this->out(__d('cake_console', 'Remove %s, which the files of pieceofcake2/app replace', $file));
+            } else {
+                $left[] = $file;
+            }
+        }
+        if ($left !== []) {
+            $this->out(__d('cake_console', '<warning>Delete %s, which the files of pieceofcake2/app replace, once you have compared them.</warning>', implode(', ', $left)));
         }
     }
 

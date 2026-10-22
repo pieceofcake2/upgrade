@@ -273,7 +273,6 @@ of [pieceofcake2/app](https://github.com/pieceofcake2/app), then its classes int
 # 1. The CakePHP 2 layout (app/Config/, app/Controller/, app/View/, ...) to config/, src/, templates/, ...
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
-# Copy config/define.php, bin/cake, webroot/index.php and webroot/test.php from pieceofcake2/app
 composer dump-autoload
 
 # 2. The classes into the App namespace
@@ -307,7 +306,23 @@ An application moves from the CakePHP 2 layout to the layout of pieceofcake2/app
 | `app/Locale/` | `resources/locales/` |
 | `app/Test/Case/`, `app/Test/Fixture/` | `tests/TestCase/`, `tests/Fixture/` |
 | `app/Plugin/<Name>/` | `plugins/<Name>/` |
-| `app/webroot/`, `app/tmp/logs/`, `app/tmp/` | `webroot/`, `logs/`, `tmp/` |
+| `app/Vendor/` | `vendors/`, where `App::import('Vendor', ...)` finds the hand-copied libraries and which Composer does not manage |
+| `app/webroot/` (but `index.php` and `test.php`), `app/tmp/logs/`, `app/tmp/` | `webroot/`, `logs/`, `tmp/` |
+
+The entry files of the CakePHP 2 layout define its paths, so the entry files of pieceofcake2/app replace them:
+`config/define.php`, `bin/cake`, `webroot/index.php`, `webroot/test.php` and `webroot/.htaccess`, and the directories
+of `tmp/` and `logs/`, are created when they are missing, also in an application already in the new layout. The plugin
+ships copies of these files of pieceofcake2/app in `resources/skeleton/`, so the files do not depend on the version of
+pieceofcake2/app. An existing file is never overwritten.
+
+- The constants of your own that the old entry files define (`app/webroot/index.php`, `app/webroot/test.php`,
+  `app/Console/cake.php`), e.g. `define('SITE_NAME', 'Blog')`, are added to the new `config/define.php`, which all
+  the entry files load. The constants of CakePHP 2 (`ROOT`, `APP_DIR`, `WEBROOT_DIR`, `WWW_ROOT`,
+  `CAKE_CORE_INCLUDE_PATH`, ...) are not: the new files define them for the new layout, and Composer loads the core.
+  A constant built on the path of the old file (`__FILE__`, `__DIR__`) is listed for you to define from `ROOT`.
+- In a Git repository, the old entry files (`app/webroot/index.php`, `app/webroot/test.php`, `app/Console/cake`,
+  `cake.php` and `cake.bat`) are removed with `git rm`; Git keeps them in its history, and refuses to remove a file
+  with changes that are not committed, which then stays. Outside Git they stay, to be compared and deleted.
 
 A plugin keeps its classes where they are, as the `src/` of a plugin holds namespaced classes only (they move into
 `src/` with `namespace`): `Config/` moves to `config/`, the templates of `View/` to `templates/`, `Locale/` to
@@ -328,10 +343,11 @@ of `autoload` and `autoload-dev` (`app/Controller/` becomes `src/Controller/`), 
 
 What you do by hand, as the command lists it:
 
-- Copy `config/define.php`, `bin/cake`, `webroot/index.php` and `webroot/test.php` from pieceofcake2/app: the files of
-  `app/` define the paths of the CakePHP 2 layout. Move your changes of the old files into them.
-- The files that do not move: `app/Vendor/` (install these libraries with Composer), `app/Console/cake`,
-  `app/Console/cake.php` (replaced by `bin/cake`), `app/index.php`, `app/.htaccess` and the other files of `app/`.
+- Compare the old entry files with the new ones for code of your own other than constants, and move it.
+- Set the document root of the web server to `webroot/`: an `index.php` or `.htaccess` in the root of the project
+  that leads to `app/webroot/` is listed.
+- The files that do not move: `app/index.php`, `app/.htaccess` and the other files of `app/`. Install the libraries
+  of `vendors/` with Composer when they have a package.
 - Remove `$ext = '.thtml'` from your controllers and views when `.thtml` templates became `.php`.
 - Paths in your code (`APP . 'Config' . DS`, `App::build()`), in your web server configuration, in `.gitignore`
   (`app/tmp/`) and in your deployment are not changed.
