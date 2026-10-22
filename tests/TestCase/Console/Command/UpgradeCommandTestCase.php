@@ -81,7 +81,7 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
         $this->_cwd = getcwd();
         $this->_root = rtrim((string)realpath(sys_get_temp_dir()), DS) . DS . 'upgrade-command-test-' . getmypid() . DS;
         (new Folder($this->_root))->delete();
-        new Folder($this->_root, true);
+        mkdir($this->_root, 0777, true);
         $this->_errors = [];
 
         $this->out = new UpgradeCommandTestOutput();

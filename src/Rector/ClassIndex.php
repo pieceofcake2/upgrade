@@ -65,20 +65,26 @@ final class ClassIndex
                 }
                 $name = $classLike->namespacedName->toString();
                 $this->classes[strtolower($name)] = $name;
-                $parents = [];
-                if ($classLike instanceof Class_) {
-                    $parents = $classLike->implements;
-                    if ($classLike->extends !== null) {
-                        $parents[] = $classLike->extends;
-                    }
-                } elseif ($classLike instanceof Interface_) {
-                    $parents = $classLike->extends;
-                }
-                foreach ($parents as $parent) {
+                foreach ($this->parentsOf($classLike) as $parent) {
                     $this->parents[strtolower($parent->toString())][] = $name;
                 }
             }
         }
+    }
+
+    /**
+     * The classes and interfaces that a class extends or implements, or that an interface extends
+     *
+     * @param \PhpParser\Node\Stmt\ClassLike $classLike The class, interface or trait
+     * @return array<\PhpParser\Node\Name>
+     */
+    private function parentsOf(ClassLike $classLike): array
+    {
+        if ($classLike instanceof Class_) {
+            return $classLike->extends !== null ? [...$classLike->implements, $classLike->extends] : $classLike->implements;
+        }
+
+        return $classLike instanceof Interface_ ? $classLike->extends : [];
     }
 
     /**

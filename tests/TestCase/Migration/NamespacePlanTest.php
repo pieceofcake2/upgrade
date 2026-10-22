@@ -38,7 +38,7 @@ class NamespacePlanTest extends CakeTestCase
         parent::setUp();
         $this->_root = rtrim((string)realpath(sys_get_temp_dir()), DS) . DS . 'upgrade-plan-test-' . getmypid();
         (new Folder($this->_root))->delete();
-        new Folder($this->_root, true);
+        mkdir($this->_root, 0777, true);
     }
 
     /**
@@ -58,7 +58,9 @@ class NamespacePlanTest extends CakeTestCase
     protected function _write(string $file, string $contents = "<?php\n"): void
     {
         $path = $this->_root . DS . str_replace('/', DS, $file);
-        new Folder(dirname($path), true);
+        if (!is_dir(dirname($path))) {
+            mkdir(dirname($path), 0777, true);
+        }
         file_put_contents($path, $contents);
     }
 

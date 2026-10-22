@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace PieceOfCake2\Upgrade\Migration;
 
+use PhpParser\Comment;
 use PhpParser\Error;
+use PhpParser\Node;
 use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Declare_;
 use PhpParser\Node\Stmt\GroupUse;
@@ -53,52 +55,11 @@ final class HeaderFormatter
         } catch (Error) {
             return $code;
         }
-        $declares = [];
-        $header = [];
-        $namespace = null;
-        $body = [];
-        foreach ($stmts as $index => $stmt) {
-            if ($stmt instanceof Declare_ && $stmt->stmts === null) {
-                $declares[] = $stmt;
-            } elseif ($stmt instanceof Nop) {
-                $header[] = $stmt;
-            } elseif ($stmt instanceof Namespace_ && $stmt->name !== null && $stmt->getAttribute('kind') === Namespace_::KIND_SEMICOLON && count($stmts) === $index + 1) {
-                $namespace = $stmt;
-                $body = $stmt->stmts;
-            } elseif ($stmt instanceof Namespace_) {
-                return $code;
-            } else {
-                $body = array_slice($stmts, $index);
-                break;
-            }
-        }
-        $uses = [];
-        $first = null;
-        foreach ($body as $stmt) {
-            if ($stmt instanceof Namespace_) {
-                return $code;
-            }
-            if ($first === null && ($stmt instanceof Use_ || $stmt instanceof GroupUse)) {
-                $uses[] = $stmt;
-            } elseif ($first === null && !$stmt instanceof Nop) {
-                $first = $stmt;
-            }
-        }
-        if ($first === null || ($namespace === null && $uses === [])) {
+        $head = self::head($stmts);
+        if ($head === null) {
             return $code;
         }
-
-        $docs = [];
-        foreach (array_filter([...$header, ...$declares, $namespace]) as $stmt) {
-            foreach ($stmt->getComments() as $comment) {
-                $docs[] = $comment->getText();
-            }
-        }
-        foreach ($uses as $use) {
-            foreach ($use->getComments() as $comment) {
-                $docs[] = $comment->getText();
-            }
-        }
+        [$declares, $namespace, $uses, $first, $docs] = $head;
         $comments = $first->getComments();
         if ($docs === [] && $comments !== [] && (!$first instanceof ClassLike || count($comments) > 1)) {
             $docs[] = array_shift($comments)->getText();
@@ -108,21 +69,68 @@ final class HeaderFormatter
         $rest = substr($code, $lineStart === false ? $restStart : $lineStart + 1);
 
         $eol = str_contains($code, "\r\n") ? "\r\n" : "\n";
-        $text = static fn($node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1);
-        $blocks = [];
-        if ($docs !== []) {
-            $blocks[] = implode($eol, $docs);
-        }
-        if ($declares !== []) {
-            $blocks[] = implode($eol, array_map($text, $declares));
-        }
-        if ($namespace !== null && $namespace->name !== null) {
-            $blocks[] = 'namespace ' . $namespace->name->toString() . ';';
-        }
-        if ($uses !== []) {
-            $blocks[] = implode($eol, array_map($text, $uses));
-        }
+        $text = static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1);
+        $blocks = array_filter([
+            implode($eol, $docs),
+            implode($eol, array_map($text, $declares)),
+            $namespace !== null ? 'namespace ' . $namespace . ';' : '',
+            implode($eol, array_map($text, $uses)),
+        ], static fn(string $block): bool => $block !== '');
 
         return '<?php' . $eol . ($docs === [] ? $eol : '') . implode($eol . $eol, $blocks) . $eol . $eol . $rest;
+    }
+
+    /**
+     * The statements of the beginning of a file
+     *
+     * @param array<\PhpParser\Node\Stmt> $stmts The statements of the file
+     * @return array{array<\PhpParser\Node\Stmt>, string|null, array<\PhpParser\Node\Stmt>, \PhpParser\Node\Stmt, array<string>}|null
+     *   The declare statements, the namespace, the use statements, the first other statement and the comments before
+     *   it, or null when the file cannot be formatted
+     */
+    private static function head(array $stmts): ?array
+    {
+        $declares = [];
+        $comments = [];
+        $namespace = null;
+        $body = [];
+        foreach ($stmts as $index => $stmt) {
+            if ($stmt instanceof Declare_ && $stmt->stmts === null) {
+                $declares[] = $stmt;
+            } elseif ($stmt instanceof Namespace_ && $stmt->name !== null && $stmt->getAttribute('kind') === Namespace_::KIND_SEMICOLON && count($stmts) === $index + 1) {
+                $namespace = $stmt;
+                $body = $stmt->stmts;
+            } elseif ($stmt instanceof Namespace_) {
+                return null;
+            } elseif (!$stmt instanceof Nop) {
+                $body = array_slice($stmts, $index);
+                break;
+            }
+            $comments = array_merge($comments, $stmt->getComments());
+        }
+        $uses = [];
+        foreach ($body as $stmt) {
+            if ($stmt instanceof Namespace_) {
+                return null;
+            }
+            if ($stmt instanceof Use_ || $stmt instanceof GroupUse) {
+                $uses[] = $stmt;
+                $comments = array_merge($comments, $stmt->getComments());
+            } elseif (!$stmt instanceof Nop) {
+                if ($namespace === null && $uses === []) {
+                    return null;
+                }
+
+                return [
+                    $declares,
+                    $namespace?->name?->toString(),
+                    $uses,
+                    $stmt,
+                    array_map(static fn(Comment $comment): string => $comment->getText(), $comments),
+                ];
+            }
+        }
+
+        return null;
     }
 }

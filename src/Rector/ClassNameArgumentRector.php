@@ -155,31 +155,35 @@ CODE_SAMPLE,
         if ($node->isFirstClassCallable()) {
             return null;
         }
-        $args = $node->getArgs();
         if ($node instanceof FuncCall) {
-            $name = $node->name instanceof Name ? strtolower($node->name->getLast()) : '';
-            if (isset(self::FUNCTIONS[$name])) {
-                return $this->replaceClass($args[self::FUNCTIONS[$name]] ?? null) ? $node : null;
-            }
-            if (isset(self::CALLABLES[$name])) {
-                return $this->replaceCallable($args[self::CALLABLES[$name]] ?? null) ? $node : null;
-            }
-
-            return null;
+            return $this->refactorFuncCall($node) ? $node : null;
         }
         if ($node instanceof New_) {
-            if (!$node->class instanceof Name || !in_array(strtolower($node->class->getLast()), self::REFLECTION, true)) {
-                return null;
-            }
+            $isReflection = $node->class instanceof Name && in_array(strtolower($node->class->getLast()), self::REFLECTION, true);
 
-            return $this->replaceClass($args[0] ?? null) ? $node : null;
+            return $isReflection && $this->replaceClass($node->getArgs()[0] ?? null) ? $node : null;
         }
         $method = $this->getName($node->name);
-        if ($method === null || !in_array(strtolower($method), self::TEST_METHODS, true)) {
-            return null;
+        $isTestMethod = $method !== null && in_array(strtolower($method), self::TEST_METHODS, true);
+
+        return $isTestMethod && $this->replaceClass($node->getArgs()[0] ?? null) ? $node : null;
+    }
+
+    /**
+     * The class or callable argument of a function
+     *
+     * @param \PhpParser\Node\Expr\FuncCall $node Call
+     * @return bool Whether it changed
+     */
+    private function refactorFuncCall(FuncCall $node): bool
+    {
+        $args = $node->getArgs();
+        $name = $node->name instanceof Name ? strtolower($node->name->getLast()) : '';
+        if (isset(self::FUNCTIONS[$name])) {
+            return $this->replaceClass($args[self::FUNCTIONS[$name]] ?? null);
         }
 
-        return $this->replaceClass($args[0] ?? null) ? $node : null;
+        return isset(self::CALLABLES[$name]) && $this->replaceCallable($args[self::CALLABLES[$name]] ?? null);
     }
 
     /**

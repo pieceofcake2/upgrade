@@ -575,7 +575,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         try {
             foreach (['class-name-strings-expected' => [], 'class-name-strings-no-short-names-expected' => ['--no-short-names']] as $expected => $options) {
                 $dir = $this->_root . $expected . DS;
-                new Folder($dir, true);
+                mkdir($dir, 0777, true);
                 foreach (glob($fixtures . 'class-name-strings' . DS . '*.php') ?: [] as $file) {
                     copy($file, $dir . basename($file));
                 }
@@ -603,7 +603,7 @@ PHP, $this->_read('Lib/Legacy.php'));
     {
         $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', '_runRector'], [$this->out, $this->out, $this->getMock('ConsoleInput', [], [], '', false)]);
         $env = [];
-        $this->Shell->expects($this->exactly(2))->method('_runRector')->willReturnCallback(function (array $command) use (&$env): int {
+        $this->Shell->expects($this->exactly(2))->method('_runRector')->willReturnCallback(function () use (&$env): int {
             $env[] = [getenv('UPGRADE_SHORT_NAMES'), getenv('UPGRADE_APP_NAMESPACE'), is_file((string)getenv('UPGRADE_RECTOR_REPORT'))];
 
             return 0;

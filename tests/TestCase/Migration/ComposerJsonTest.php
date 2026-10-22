@@ -188,6 +188,24 @@ JSON;
     }
 
     /**
+     * The values of other types around the changed section, and strings with escaped quotes and brackets
+     *
+     * @return void
+     */
+    public function testOtherValues(): void
+    {
+        $json = "{\n    \"description\": \"A \\\"blog\\\" {app} [x]\",\n    \"prefer-stable\": true,\n    \"autoload\": {\"classmap\": [\"src/\"]},\n    \"version\": 2,\n    \"extra\": null\n}\n";
+        $composer = new ComposerJson($json);
+        $composer->removeClassmap('autoload', 'src/');
+        $composer->addPsr4('autoload', 'App\\', 'src/');
+
+        $this->assertSame(
+            "{\n    \"description\": \"A \\\"blog\\\" {app} [x]\",\n    \"prefer-stable\": true,\n    \"autoload\": {\n        \"psr-4\": {\n            \"App\\\\\": \"src/\"\n        }\n    },\n    \"version\": 2,\n    \"extra\": null\n}\n",
+            $composer->contents(),
+        );
+    }
+
+    /**
      * Not JSON
      *
      * @return void

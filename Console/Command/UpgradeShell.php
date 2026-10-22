@@ -363,32 +363,11 @@ class UpgradeShell extends AppShell
     {
         $plugin = $this->params['plugin'] ?? null;
         $dryRun = !empty($this->params['dry-run']);
-        if ($plugin && isset($this->params['namespace'])) {
-            $this->error(__d('cake_console', 'A plugin has the namespace of its name, as CakePHP looks its classes up as %s\\<Type>\\<Class>: leave out --namespace.', $plugin));
-
+        $target = $this->_namespaceTarget($plugin ? (string)$plugin : null);
+        if ($target === null) {
             return null;
         }
-        $namespace = $plugin ? (string)$plugin : trim((string)($this->params['namespace'] ?? 'App'), '\\');
-        if (!preg_match('/^[A-Z][A-Za-z0-9_]*(\\\\[A-Z][A-Za-z0-9_]*)*$/', $namespace)) {
-            $this->error(__d('cake_console', 'Not a namespace: %s', $namespace));
-
-            return null;
-        }
-        $root = $plugin ? $this->_pluginPath((string)$plugin) : $this->_projectRoot();
-        if ($root === null) {
-            return null;
-        }
-        $legacy = NamespacePlan::legacyLayout($root, (bool)$plugin);
-        if ($legacy !== null) {
-            $this->error(__d('cake_console', '%s is in the CakePHP 2 layout (%s): run bin/cake upgrade layout%s first.', $plugin ?: 'The application', $legacy, $plugin ? ' --plugin ' . $plugin : ''));
-
-            return null;
-        }
-        if (!$plugin && !is_file($root . DS . 'config' . DS . 'core.php')) {
-            $this->error(__d('cake_console', 'No config/core.php in %s: run the command from the root of the application.', $root));
-
-            return null;
-        }
+        [$root, $namespace] = $target;
 
         // A dry run makes the changes in a copy, and shows them as a diff
         $work = $dryRun ? $this->_copyForDryRun($root, 'after') : $root;
@@ -406,15 +385,7 @@ class UpgradeShell extends AppShell
             $mover->removeEmpty($work . DS . $dir);
         }
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
-        $configFiles = [];
-        foreach ($plan->configPaths() as $dir) {
-            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
-            foreach ($iterator as $file) {
-                if ($file->isFile() && $file->getExtension() === 'php') {
-                    $configFiles[$file->getPathname()] = md5_file($file->getPathname());
-                }
-            }
-        }
+        $configFiles = $this->_hashes($plan->configPaths());
 
         $cwd = (string)getcwd();
         chdir($work);
@@ -423,17 +394,7 @@ class UpgradeShell extends AppShell
         } finally {
             chdir($cwd);
         }
-        // The namespaced files, and the other files that Rector changed
-        $changed = array_keys(array_filter($configFiles, static fn($hash, string $file): bool => md5_file($file) !== $hash, ARRAY_FILTER_USE_BOTH));
-        foreach (array_merge(array_keys($plan->files), $changed) as $file) {
-            if (is_file($file)) {
-                $contents = HeaderFormatter::format((string)file_get_contents($file));
-                if (in_array($file, $plan->aliases, true)) {
-                    $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
-                }
-                file_put_contents($file, $contents);
-            }
-        }
+        $this->_formatHeaders($plan, $configFiles);
         if ($code !== 0) {
             if ($before !== null) {
                 (new Folder(dirname($work, 2)))->delete();
@@ -456,6 +417,89 @@ class UpgradeShell extends AppShell
         }
 
         return $code;
+    }
+
+    /**
+     * The hashes of the PHP files of directories, to find the files that Rector changes
+     *
+     * @param array<string> $dirs The directories
+     * @return array<string, string> The hashes, by path
+     */
+    protected function _hashes(array $dirs)
+    {
+        $hashes = [];
+        foreach ($dirs as $dir) {
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php') {
+                    $hashes[$file->getPathname()] = (string)md5_file($file->getPathname());
+                }
+            }
+        }
+
+        return $hashes;
+    }
+
+    /**
+     * Orders the docblock, namespace and use statements at the beginning of the namespaced files and of the other
+     * files that Rector changed, and separates the class_alias() of the core class overrides
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param array<string, string> $hashes The hashes of the other files before Rector, by path
+     * @return void
+     */
+    protected function _formatHeaders(NamespacePlan $plan, array $hashes)
+    {
+        $changed = array_keys(array_filter($hashes, static fn(string $hash, string $file): bool => md5_file($file) !== $hash, ARRAY_FILTER_USE_BOTH));
+        foreach (array_merge(array_keys($plan->files), $changed) as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            $contents = HeaderFormatter::format((string)file_get_contents($file));
+            if (in_array($file, $plan->aliases, true)) {
+                $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
+            }
+            file_put_contents($file, $contents);
+        }
+    }
+
+    /**
+     * The directory and the namespace of `upgrade namespace`, or null after an error: a plugin uses its name, an
+     * application `--namespace` or App, and the directory must be in the layout of pieceofcake2/app
+     *
+     * @param string|null $plugin The plugin, or null for the application
+     * @return array{string, string}|null
+     */
+    protected function _namespaceTarget($plugin)
+    {
+        if ($plugin !== null && isset($this->params['namespace'])) {
+            $this->error(__d('cake_console', 'A plugin has the namespace of its name, as CakePHP looks its classes up as %s\\<Type>\\<Class>: leave out --namespace.', $plugin));
+
+            return null;
+        }
+        $namespace = $plugin ?? trim((string)($this->params['namespace'] ?? 'App'), '\\');
+        if (!preg_match('/^[A-Z][A-Za-z0-9_]*(\\\\[A-Z][A-Za-z0-9_]*)*$/', $namespace)) {
+            $this->error(__d('cake_console', 'Not a namespace: %s', $namespace));
+
+            return null;
+        }
+        $root = $plugin !== null ? $this->_pluginPath($plugin) : $this->_projectRoot();
+        if ($root === null) {
+            return null;
+        }
+        $legacy = NamespacePlan::legacyLayout($root, $plugin !== null);
+        if ($legacy !== null) {
+            $this->error(__d('cake_console', '%s is in the CakePHP 2 layout (%s): run bin/cake upgrade layout%s first.', $plugin ?? 'The application', $legacy, $plugin !== null ? ' --plugin ' . $plugin : ''));
+
+            return null;
+        }
+        if ($plugin === null && !is_file($root . DS . 'config' . DS . 'core.php')) {
+            $this->error(__d('cake_console', 'No config/core.php in %s: run the command from the root of the application.', $root));
+
+            return null;
+        }
+
+        return [$root, $namespace];
     }
 
     /**
@@ -562,57 +606,19 @@ class UpgradeShell extends AppShell
      */
     protected function _updateComposerJson(NamespacePlan $plan, $root, $work, $dryRun)
     {
-        $file = $work . DS . 'composer.json';
-        $prefix = '';
-        if ($plan->plugin && !is_file($file)) {
-            $project = (string)$this->_projectRoot(false);
-            if (!str_starts_with($root, $project . DS)) {
-                $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from src/ and %s\\Test\\ from tests/ of the plugin with PSR-4.</warning>', $plan->namespace, $plan->namespace));
-
-                return;
-            }
-            $file = $project . DS . 'composer.json';
-            $prefix = str_replace(DS, '/', substr($root, strlen($project) + 1)) . '/';
-        }
-        if (!is_file($file)) {
-            $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from %ssrc/ and %s\\Test\\ from %stests/ with PSR-4.</warning>', $plan->namespace, $prefix, $plan->namespace, $prefix));
-
+        $target = $this->_composerFile($plan, $root, $work);
+        if ($target === null) {
             return;
         }
+        [$file, $prefix] = $target;
         $composer = new ComposerJson((string)file_get_contents($file));
         $name = $prefix === '' ? 'composer.json' : 'composer.json of the application';
-        $changes = [];
-        // PSR-4 replaces the classmap of the code, also of the moved directories (Controller/ of a plugin)
-        $dirs = array_merge(['src/', 'tests/'], array_keys($plan->paths));
-        foreach (['autoload', 'autoload-dev'] as $section) {
-            foreach ($dirs as $dir) {
-                foreach ($composer->removeClassmap($section, $prefix . $dir, [$prefix . 'src/Cake/']) as $removed) {
-                    $changes[] = sprintf('%s.classmap: removed %s', $section, $removed);
-                }
-            }
-        }
+        $changes = $this->_switchToPsr4($composer, $plan, $prefix);
         $paths = [];
         foreach ($plan->paths as $from => $to) {
             $paths[$prefix . $from] = $prefix . $to;
         }
         $this->_moveComposerPaths($composer, $paths, $name);
-        $vendor = rtrim((string)($composer->config('vendor-dir') ?: 'vendor'), '/');
-        foreach ([['autoload', 'src/', ''], ['autoload-dev', 'tests/', 'Test\\']] as [$section, $dir, $suffix]) {
-            if ($composer->addPsr4($section, $plan->namespace . '\\' . $suffix, $prefix . $dir)) {
-                $changes[] = sprintf('%s.psr-4: %s\\%s => %s%s', $section, $plan->namespace, $suffix, $prefix, $dir);
-            }
-        }
-        if ($plan->overridden !== []) {
-            if ($composer->addToList('autoload', 'classmap', 'src/Cake/')) {
-                $changes[] = 'autoload.classmap: src/Cake/';
-            }
-            foreach ($plan->overridden as $overridden) {
-                $excluded = $vendor . '/pieceofcake2/cakephp/src/' . $overridden;
-                if ($composer->addToList('autoload', 'exclude-from-classmap', $excluded)) {
-                    $changes[] = 'autoload.exclude-from-classmap: ' . $excluded;
-                }
-            }
-        }
         if ($changes === []) {
             $this->out(__d('cake_console', '%s already autoloads %s with PSR-4.', $name, $plan->namespace));
         } else {
@@ -622,6 +628,75 @@ class UpgradeShell extends AppShell
         if ((!$dryRun || $prefix === '') && $composer->isChanged()) {
             file_put_contents($file, $composer->contents());
         }
+    }
+
+    /**
+     * The composer.json to change: of the application or plugin, or of the application for a plugin without one
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string $root The directory of the application or plugin
+     * @param string $work The directory of the plan (a copy of the root for a dry run)
+     * @return array{string, string}|null The file, and the path of the plugin in the application ('' or 'plugins/Blog/')
+     */
+    protected function _composerFile(NamespacePlan $plan, $root, $work)
+    {
+        $file = $work . DS . 'composer.json';
+        $prefix = '';
+        if ($plan->plugin && !is_file($file)) {
+            $project = (string)$this->_projectRoot(false);
+            if (!str_starts_with($root, $project . DS)) {
+                $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from src/ and %s\\Test\\ from tests/ of the plugin with PSR-4.</warning>', $plan->namespace, $plan->namespace));
+
+                return null;
+            }
+            $file = $project . DS . 'composer.json';
+            $prefix = str_replace(DS, '/', substr($root, strlen($project) + 1)) . '/';
+        }
+        if (!is_file($file)) {
+            $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from %ssrc/ and %s\\Test\\ from %stests/ with PSR-4.</warning>', $plan->namespace, $prefix, $plan->namespace, $prefix));
+
+            return null;
+        }
+
+        return [$file, $prefix];
+    }
+
+    /**
+     * PSR-4 instead of the classmap of the code, also of the moved directories (Controller/ of a plugin), and the
+     * classmap of the core class overrides
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\ComposerJson $composer composer.json
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string $prefix The path of the plugin in the application, or ''
+     * @return array<string> The changes
+     */
+    protected function _switchToPsr4(ComposerJson $composer, NamespacePlan $plan, $prefix)
+    {
+        $changes = [];
+        foreach (['autoload', 'autoload-dev'] as $section) {
+            foreach (array_merge(['src/', 'tests/'], array_keys($plan->paths)) as $dir) {
+                foreach ($composer->removeClassmap($section, $prefix . $dir, [$prefix . 'src/Cake/']) as $removed) {
+                    $changes[] = sprintf('%s.classmap: removed %s', $section, $removed);
+                }
+            }
+        }
+        foreach ([['autoload', 'src/', ''], ['autoload-dev', 'tests/', 'Test\\']] as [$section, $dir, $suffix]) {
+            if ($composer->addPsr4($section, $plan->namespace . '\\' . $suffix, $prefix . $dir)) {
+                $changes[] = sprintf('%s.psr-4: %s\\%s => %s%s', $section, $plan->namespace, $suffix, $prefix, $dir);
+            }
+        }
+        if ($plan->overridden !== [] && $composer->addToList('autoload', 'classmap', 'src/Cake/')) {
+            $changes[] = 'autoload.classmap: src/Cake/';
+        }
+        $vendor = rtrim((string)($composer->config('vendor-dir') ?: 'vendor'), '/');
+        foreach ($plan->overridden as $overridden) {
+            $excluded = $vendor . '/pieceofcake2/cakephp/src/' . $overridden;
+            if ($composer->addToList('autoload', 'exclude-from-classmap', $excluded)) {
+                $changes[] = 'autoload.exclude-from-classmap: ' . $excluded;
+            }
+        }
+
+        return $changes;
     }
 
     /**
@@ -661,11 +736,11 @@ class UpgradeShell extends AppShell
             ),
             RecursiveIteratorIterator::SELF_FIRST,
         );
-        new Folder($copy, true);
+        mkdir($copy, 0777, true);
         foreach ($iterator as $file) {
             $target = $copy . DS . substr($file->getPathname(), strlen($root) + 1);
             if ($file->isDir()) {
-                new Folder($target, true);
+                mkdir($target, 0777, true);
             } else {
                 copy($file->getPathname(), $target);
             }

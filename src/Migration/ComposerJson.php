@@ -127,63 +127,85 @@ final class ComposerJson
     {
         $moves = array_combine(array_map([self::class, 'normalize'], array_keys($moves)), array_map([self::class, 'normalize'], $moves));
         uksort($moves, static fn(string $a, string $b): int => strlen($b) <=> strlen($a));
-        $changes = [];
-        $unknown = [];
-        $move = function (string $path, string $where) use ($moves, &$changes, &$unknown): string {
-            $normalized = self::normalize($path);
-            foreach ($moves as $from => $to) {
-                if ($normalized === $from || str_starts_with($normalized, $from . '/')) {
-                    $new = $to . substr($normalized, strlen($from)) . (str_ends_with($path, '/') ? '/' : '');
-                    $changes[] = sprintf('%s: %s => %s', $where, $path, $new);
-
-                    return $new;
-                }
-            }
-            foreach (array_keys($moves) as $from) {
-                if (str_starts_with($from, $normalized . '/')) {
-                    $unknown[] = sprintf('%s: %s', $where, $path);
-                    break;
-                }
-            }
-
-            return $path;
-        };
+        $result = [[], []];
         foreach (['autoload', 'autoload-dev'] as $section) {
-            if (!isset($this->data[$section]) || !is_array($this->data[$section])) {
-                continue;
-            }
-            $before = $this->data[$section];
-            foreach ($this->data[$section] as $type => $entries) {
-                if (!is_array($entries)) {
-                    continue;
-                }
-                foreach ($entries as $key => $entry) {
-                    if (is_string($entry)) {
-                        $this->data[$section][$type][$key] = $move($entry, $section . '.' . $type);
-                    } elseif (is_array($entry)) {
-                        foreach ($entry as $index => $path) {
-                            $this->data[$section][$type][$key][$index] = $move((string)$path, $section . '.' . $type);
-                        }
-                    }
-                }
-            }
-            if ($this->data[$section] !== $before) {
-                $this->changed[$section] = true;
-            }
+            $this->moveSectionPaths($section, $moves, $result);
         }
-        $paths = $this->data['extra']['installer-paths'] ?? null;
-        if (is_array($paths)) {
+        $installerPaths = $this->data['extra']['installer-paths'] ?? null;
+        if (is_array($installerPaths)) {
             $new = [];
-            foreach ($paths as $path => $types) {
-                $new[$move((string)$path, 'extra.installer-paths')] = $types;
+            foreach ($installerPaths as $path => $types) {
+                $new[$this->movePath((string)$path, $moves, 'extra.installer-paths', $result)] = $types;
             }
-            if ($new !== $paths) {
+            if ($new !== $installerPaths) {
                 $this->data['extra']['installer-paths'] = $new;
                 $this->changed['extra'] = true;
             }
         }
 
-        return [$changes, $unknown];
+        return $result;
+    }
+
+    /**
+     * Replaces the paths of a section of the autoloading that are in moved directories: classmap and files are lists of
+     * paths, psr-0 and psr-4 map namespaces to a path or a list of them
+     *
+     * @param string $section `autoload` or `autoload-dev`
+     * @param array<string, string> $moves The new paths, by old path, normalized, the longest first
+     * @param array{array<string>, array<string>} $result The changes and the paths that cannot be moved
+     * @return void
+     */
+    private function moveSectionPaths(string $section, array $moves, array &$result): void
+    {
+        if (!isset($this->data[$section]) || !is_array($this->data[$section])) {
+            return;
+        }
+        $before = $this->data[$section];
+        foreach ($this->data[$section] as $type => $entries) {
+            foreach (is_array($entries) ? $entries : [] as $key => $entry) {
+                if (!is_string($entry) && !is_array($entry)) {
+                    continue;
+                }
+                $paths = [];
+                foreach ((array)$entry as $index => $path) {
+                    $paths[$index] = $this->movePath((string)$path, $moves, $section . '.' . $type, $result);
+                }
+                $this->data[$section][$type][$key] = is_array($entry) ? $paths : $paths[0];
+            }
+        }
+        if ($this->data[$section] !== $before) {
+            $this->changed[$section] = true;
+        }
+    }
+
+    /**
+     * The new path of a path in a moved directory
+     *
+     * @param string $path The path
+     * @param array<string, string> $moves The new paths, by old path, normalized, the longest first
+     * @param string $where The setting, for the messages
+     * @param array{array<string>, array<string>} $result The changes and the paths that cannot be moved
+     * @return string The new path, or the path
+     */
+    private function movePath(string $path, array $moves, string $where, array &$result): string
+    {
+        $normalized = self::normalize($path);
+        foreach ($moves as $from => $to) {
+            if ($normalized === $from || str_starts_with($normalized, $from . '/')) {
+                $new = $to . substr($normalized, strlen($from)) . (str_ends_with($path, '/') ? '/' : '');
+                $result[0][] = sprintf('%s: %s => %s', $where, $path, $new);
+
+                return $new;
+            }
+        }
+        foreach (array_keys($moves) as $from) {
+            if (str_starts_with($from, $normalized . '/')) {
+                $result[1][] = sprintf('%s: %s', $where, $path);
+                break;
+            }
+        }
+
+        return $path;
     }
 
     /**
@@ -228,26 +250,35 @@ final class ComposerJson
                 $contents = substr($contents, 0, $start) . $value . substr($contents, $end);
                 continue;
             }
-            // A new section after require-dev, require or autoload, else at the end
-            $after = null;
-            foreach (['autoload', 'require-dev', 'require'] as $previous) {
-                if (isset($spans[$previous])) {
-                    $after = $spans[$previous][1];
-                    break;
-                }
-            }
-            $entry = $indent . json_encode($section) . ': ' . $value;
-            if ($after !== null) {
-                $contents = substr($contents, 0, $after) . ',' . $eol . $entry . substr($contents, $after);
-            } else {
-                $close = (int)strrpos($contents, '}');
-                $body = rtrim(substr($contents, 0, $close));
-                $separator = str_ends_with($body, '{') ? '' : ',';
-                $contents = $body . $separator . $eol . $entry . $eol . substr($contents, $close);
-            }
+            $contents = $this->insertSection($contents, $indent . json_encode($section) . ': ' . $value, $spans, $eol);
         }
 
         return $contents;
+    }
+
+    /**
+     * Inserts a new section after require-dev, require or autoload, else at the end
+     *
+     * @param string $contents The JSON text
+     * @param string $entry The key and the value of the section
+     * @param array<string, array{int, int}> $spans The offsets of the values of the top-level keys
+     * @param string $eol The line ending
+     * @return string
+     */
+    private function insertSection(string $contents, string $entry, array $spans, string $eol): string
+    {
+        foreach (['autoload', 'require-dev', 'require'] as $previous) {
+            if (isset($spans[$previous])) {
+                $after = $spans[$previous][1];
+
+                return substr($contents, 0, $after) . ',' . $eol . $entry . substr($contents, $after);
+            }
+        }
+        $close = (int)strrpos($contents, '}');
+        $body = rtrim(substr($contents, 0, $close));
+        $separator = str_ends_with($body, '{') ? '' : ',';
+
+        return $body . $separator . $eol . $entry . $eol . substr($contents, $close);
     }
 
     /**
@@ -295,61 +326,36 @@ final class ComposerJson
      */
     private function topLevelSpans(string $json): array
     {
+        // Strings, punctuation, and the other values (numbers, true, false, null)
+        preg_match_all('/"(?:[^"\\\\]|\\\\.)*"|[{}\[\],:]|[^\s{}\[\],:"]+/', $json, $tokens, PREG_OFFSET_CAPTURE);
         $spans = [];
         $depth = 0;
-        $length = strlen($json);
         $key = null;
-        $expectKey = false;
         $start = null;
-        for ($i = 0; $i < $length; $i++) {
-            $char = $json[$i];
-            if ($char === '"') {
-                $end = $i + 1;
-                while ($end < $length && $json[$end] !== '"') {
-                    $end += $json[$end] === '\\' ? 2 : 1;
-                }
-                if ($depth === 1 && $expectKey) {
-                    $key = (string)json_decode(substr($json, $i, $end - $i + 1));
-                    $expectKey = false;
-                } elseif ($depth === 1 && $start === null && $key !== null) {
-                    $spans[$key] = [$i, $end + 1];
-                    $key = null;
-                }
-                $i = $end;
-                continue;
-            }
-            if ($char === '{' || $char === '[') {
+        $expectKey = false;
+        foreach ($tokens[0] as [$token, $offset]) {
+            if ($token === '{' || $token === '[') {
                 if ($depth === 1 && $key !== null && $start === null) {
-                    $start = $i;
+                    $start = $offset;
                 }
                 $depth++;
-                if ($depth === 1) {
-                    $expectKey = true;
-                }
-                continue;
-            }
-            if ($char === '}' || $char === ']') {
+                $expectKey = $depth === 1;
+            } elseif ($token === '}' || $token === ']') {
                 $depth--;
-                if ($depth === 1 && $start !== null && $key !== null) {
-                    $spans[$key] = [$start, $i + 1];
-                    $start = null;
+                if ($depth === 1 && $key !== null && $start !== null) {
+                    $spans[$key] = [$start, $offset + 1];
+                    $key = $start = null;
+                }
+            } elseif ($depth === 1 && $token === ',') {
+                $expectKey = true;
+            } elseif ($depth === 1 && $token !== ':') {
+                if ($expectKey) {
+                    $key = (string)json_decode($token);
+                    $expectKey = false;
+                } elseif ($key !== null) {
+                    $spans[$key] = [$offset, $offset + strlen($token)];
                     $key = null;
                 }
-                continue;
-            }
-            if ($depth === 1 && $char === ',') {
-                $expectKey = true;
-                continue;
-            }
-            if ($depth === 1 && $key !== null && $start === null && !ctype_space($char) && $char !== ':') {
-                // A number, true, false or null
-                $end = $i;
-                while ($end < $length && !in_array($json[$end], [',', '}'], true) && !ctype_space($json[$end])) {
-                    $end++;
-                }
-                $spans[$key] = [$i, $end];
-                $key = null;
-                $i = $end - 1;
             }
         }
 

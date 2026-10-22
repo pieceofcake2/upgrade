@@ -195,23 +195,7 @@ final class NamespacePlan
                 $this->notices[] = sprintf('%s was not namespaced: %s', $this->relative($source), $e->getMessage());
                 continue;
             }
-            $classes = [];
-            $skip = null;
-            foreach ($stmts as $stmt) {
-                if ($stmt instanceof Namespace_) {
-                    $skip = '';
-                    break;
-                }
-                if ($stmt instanceof Function_) {
-                    $skip = 'it also declares functions, which a namespace would rename';
-                } elseif ($stmt instanceof InlineHTML) {
-                    $skip = 'it has HTML outside the PHP tags';
-                } elseif ($stmt instanceof ClassLike && $stmt->name !== null) {
-                    $classes[] = $stmt->name->toString();
-                } elseif ($stmt instanceof Declare_ && $stmt->stmts !== null) {
-                    $skip = 'it has a declare block';
-                }
-            }
+            [$classes, $skip] = $this->classesOf($stmts);
             if ($classes === [] || $skip === '') {
                 continue;
             }
@@ -230,6 +214,46 @@ final class NamespacePlan
                 $declared[strtolower($class)][] = [$class, $namespace . '\\' . $class, $file];
             }
         }
+        $this->mapClasses($declared);
+    }
+
+    /**
+     * The global classes that a file declares, and why it cannot be namespaced
+     *
+     * @param array<\PhpParser\Node\Stmt> $stmts The statements of the file
+     * @return array{array<string>, string|null} The classes, and the reason, or '' for a file with a namespace
+     */
+    private function classesOf(array $stmts): array
+    {
+        $classes = [];
+        $skip = null;
+        foreach ($stmts as $stmt) {
+            if ($stmt instanceof Namespace_) {
+                return [[], ''];
+            }
+            if ($stmt instanceof Function_) {
+                $skip = 'it also declares functions, which a namespace would rename';
+            } elseif ($stmt instanceof InlineHTML) {
+                $skip = 'it has HTML outside the PHP tags';
+            } elseif ($stmt instanceof Declare_ && $stmt->stmts !== null) {
+                $skip = 'it has a declare block';
+            } elseif ($stmt instanceof ClassLike && $stmt->name !== null) {
+                $classes[] = $stmt->name->toString();
+            }
+        }
+
+        return [$classes, $skip];
+    }
+
+    /**
+     * The new names of the classes, but those declared in more than one file, which are listed
+     *
+     * @param array<string, array<array{string, string, string}>> $declared The global name, the new name and the file
+     *   of each declaration, by lowercase name
+     * @return void
+     */
+    private function mapClasses(array $declared): void
+    {
         foreach ($declared as $classes) {
             if (count($classes) > 1) {
                 $this->notices[] = sprintf(
