@@ -59,11 +59,19 @@ final class HeaderFormatter
         if ($head === null) {
             return $code;
         }
-        [$declares, $namespace, $uses, $first, $docs] = $head;
+        [$declares, $namespace, $uses, $first, $docComments] = $head;
         $comments = $first->getComments();
-        if ($docs === [] && $comments !== [] && (!$first instanceof ClassLike || count($comments) > 1)) {
-            $docs[] = array_shift($comments)->getText();
+        if ($docComments === [] && $comments !== [] && (!$first instanceof ClassLike || count($comments) > 1)) {
+            $docComments[] = array_shift($comments);
         }
+        // A comment keeps the indentation of its first line, as in config/routes.php of CakePHP 2
+        $docs = array_map(static function (Comment $comment) use ($code): string {
+            $start = $comment->getStartFilePos();
+            $lineStart = strrpos(substr($code, 0, $start), "\n");
+            $indent = substr($code, $lineStart === false ? 0 : $lineStart + 1, $start - ($lineStart === false ? 0 : $lineStart + 1));
+
+            return (trim($indent) === '' ? $indent : '') . $comment->getText();
+        }, $docComments);
         $restStart = $comments !== [] ? $comments[0]->getStartFilePos() : $first->getStartFilePos();
         $lineStart = strrpos(substr($code, 0, $restStart), "\n");
         $rest = substr($code, $lineStart === false ? $restStart : $lineStart + 1);
@@ -84,7 +92,7 @@ final class HeaderFormatter
      * The statements of the beginning of a file
      *
      * @param array<\PhpParser\Node\Stmt> $stmts The statements of the file
-     * @return array{array<\PhpParser\Node\Stmt>, string|null, array<\PhpParser\Node\Stmt>, \PhpParser\Node\Stmt, array<string>}|null
+     * @return array{array<\PhpParser\Node\Stmt>, string|null, array<\PhpParser\Node\Stmt>, \PhpParser\Node\Stmt, array<\PhpParser\Comment>}|null
      *   The declare statements, the namespace, the use statements, the first other statement and the comments before
      *   it, or null when the file cannot be formatted
      */
@@ -126,7 +134,7 @@ final class HeaderFormatter
                     $namespace?->name?->toString(),
                     $uses,
                     $stmt,
-                    array_map(static fn(Comment $comment): string => $comment->getText(), $comments),
+                    $comments,
                 ];
             }
         }

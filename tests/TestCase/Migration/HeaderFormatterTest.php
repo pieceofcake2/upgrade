@@ -71,6 +71,21 @@ class HeaderFormatterTest extends CakeTestCase
     }
 
     /**
+     * An indented docblock keeps its indentation, as in config/routes.php of CakePHP 2
+     *
+     * @return void
+     */
+    public function testIndentedDocblock(): void
+    {
+        $code = "<?php\nuse Cake\\Routing\\Router;\n    /**\n     * Routes configuration\n     */\n\n    /**\n     * The home page\n     */\n    Router::connect('/', []);\n";
+
+        $this->assertSame(
+            "<?php\n    /**\n     * Routes configuration\n     */\n\nuse Cake\\Routing\\Router;\n\n    /**\n     * The home page\n     */\n    Router::connect('/', []);\n",
+            HeaderFormatter::format($code),
+        );
+    }
+
+    /**
      * Files that are formatted already, and files that cannot be formatted: templates, braces, invalid code, CRLF
      *
      * @return void
