@@ -180,6 +180,49 @@ final class NamespacePlan
     }
 
     /**
+     * The entry files of an application, which `upgrade layout` creates: `bin/cake` and the PHP files of `webroot/`
+     *
+     * @return array<string>
+     */
+    public function entryFiles(): array
+    {
+        if ($this->plugin) {
+            return [];
+        }
+        $files = glob($this->path('webroot') . DIRECTORY_SEPARATOR . '*.php') ?: [];
+        if (is_file($this->path('bin/cake'))) {
+            array_unshift($files, $this->path('bin/cake'));
+        }
+
+        return array_values(array_filter($files, 'is_file'));
+    }
+
+    /**
+     * The files whose classes the shell imports, not Rector, which does not import names in files with HTML: the
+     * templates (the `.php` and `.ctp` files of `templates/`) and `bin/cake`, whose `#!` line is HTML for PHP
+     *
+     * @return array<string>
+     */
+    public function htmlFiles(): array
+    {
+        $files = [];
+        $templates = $this->path('templates');
+        if (is_dir($templates)) {
+            foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($templates, FilesystemIterator::SKIP_DOTS)) as $file) {
+                if ($file->isFile() && in_array($file->getExtension(), ['php', 'ctp'], true)) {
+                    $files[] = $file->getPathname();
+                }
+            }
+            sort($files);
+        }
+        if (!$this->plugin && is_file($this->path('bin/cake'))) {
+            $files[] = $this->path('bin/cake');
+        }
+
+        return $files;
+    }
+
+    /**
      * Finds the classes of the files, after the moves, and their namespaces
      *
      * @return void

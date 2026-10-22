@@ -17,6 +17,9 @@
  */
 
 use Composer\InstalledVersions;
+use Cake\Core\Configure;
+use Cake\Error\NotFoundException;
+use Cake\TestSuite\CakeTestSuiteDispatcher;
 
 set_time_limit(0);
 ini_set('display_errors', 1);

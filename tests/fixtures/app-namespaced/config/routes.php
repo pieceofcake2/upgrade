@@ -1,6 +1,8 @@
 <?php
 
+use Cake\Routing\Router;
 use App\Routing\Route\SlugRoute;
+use Cake\Core\CakePlugin;
 
 Router::connect('/', ['controller' => 'pages', 'action' => 'display', 'home']);
 Router::connect('/posts/:slug', ['controller' => 'posts', 'action' => 'view'], ['routeClass' => SlugRoute::class]);

@@ -24,8 +24,6 @@ if (!is_array($plan)) {
 
 // The classes of the application or plugin win over the classes of CakePHP of the same name, e.g. AppShell
 $classes = array_merge(require dirname(__DIR__) . '/classes/cakephp.php', $plan['classes']);
-// The classes of CakePHP keep their global names in config/ and templates/, as in the files of CakePHP
-$renamed = $plan['renameCore'] ? $classes : $plan['classes'];
 
 $config = RectorConfig::configure()
     ->withFileExtensions($plan['extensions'])
@@ -47,9 +45,11 @@ $config = RectorConfig::configure()
         NamespacedClassNameRector::EXTENDED => require dirname(__DIR__) . '/classes/cakephp-extended.php',
         NamespacedClassNameRector::INSTANCEOF => true,
         NamespacedClassNameRector::INDEX_PATHS => $plan['indexPaths'],
-    ]);
-if ($renamed !== []) {
-    $config->withConfiguredRule(RenameClassRector::class, $renamed);
+    ])
+    ->withConfiguredRule(RenameClassRector::class, $classes);
+// Not in the templates, where the shell imports the classes, as Rector does not import names in files with HTML
+if ($plan['keepNames'] !== []) {
+    $config->withSkip([RenameClassRector::class => $plan['keepNames']]);
 }
 // After RenameClassRector: imports the names of the docblocks as the names of the code
 $config->withConfiguredRule(DocblockNameImportRector::class, [

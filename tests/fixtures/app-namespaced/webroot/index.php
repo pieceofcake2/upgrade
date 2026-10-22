@@ -17,6 +17,9 @@
  */
 
 use Composer\InstalledVersions;
+use Cake\Routing\Dispatcher;
+use Cake\Network\CakeRequest;
+use Cake\Network\CakeResponse;
 
 if (!defined('DS')) {
     define('DS', DIRECTORY_SEPARATOR);

@@ -23,6 +23,7 @@ use PieceOfCake2\Upgrade\Migration\EntryFiles;
 use PieceOfCake2\Upgrade\Migration\HeaderFormatter;
 use PieceOfCake2\Upgrade\Migration\LayoutPlan;
 use PieceOfCake2\Upgrade\Migration\Mover;
+use PieceOfCake2\Upgrade\Migration\NameImporter;
 use PieceOfCake2\Upgrade\Migration\NamespacePlan;
 use PieceOfCake2\Upgrade\Migration\Paths;
 use PieceOfCake2\Upgrade\Rector\Report;
@@ -385,7 +386,7 @@ class UpgradeShell extends AppShell
             $mover->removeEmpty($work . DS . $dir);
         }
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
-        $configFiles = $this->_hashes($plan->configPaths());
+        $configFiles = $this->_hashes(array_merge($plan->configPaths(), $plan->entryFiles()));
         $configUses = [];
         foreach (array_keys($configFiles) as $file) {
             $configUses[$file] = HeaderFormatter::uses((string)file_get_contents($file));
@@ -407,6 +408,7 @@ class UpgradeShell extends AppShell
 
             return $code;
         }
+        $this->_importNames($plan, array_merge($core, $plan->classes));
         if (!$plugin) {
             $this->_addAppNamespace($work, $namespace);
         }
@@ -424,15 +426,19 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * The hashes of the PHP files of directories, to find the files that Rector changes
+     * The hashes of files and of the PHP files of directories, to find the files that Rector changes
      *
-     * @param array<string> $dirs The directories
+     * @param array<string> $dirs The directories and files
      * @return array<string, string> The hashes, by path
      */
     protected function _hashes(array $dirs)
     {
         $hashes = [];
         foreach ($dirs as $dir) {
+            if (is_file($dir)) {
+                $hashes[$dir] = (string)md5_file($dir);
+                continue;
+            }
             $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
             foreach ($iterator as $file) {
                 if ($file->isFile() && $file->getExtension() === 'php') {
@@ -465,6 +471,26 @@ class UpgradeShell extends AppShell
                 $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
             }
             file_put_contents($file, $contents);
+        }
+    }
+
+    /**
+     * Imports the classes of the templates and of `bin/cake` with use statements: Rector does not import names in
+     * files with HTML (the `#!` line of `bin/cake`), and does not rename the classes of the templates, whose docblocks
+     * keep their names
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param array<string, string> $classes The namespaced names of the classes, by global name
+     * @return void
+     */
+    protected function _importNames(NamespacePlan $plan, array $classes)
+    {
+        foreach ($plan->htmlFiles() as $file) {
+            $code = (string)file_get_contents($file);
+            $imported = NameImporter::import($code, $classes);
+            if ($imported !== $code) {
+                file_put_contents($file, $imported);
+            }
         }
     }
 
@@ -508,8 +534,8 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * Runs the rules of `upgrade namespace` on the code (`src/`, `tests/`), then on `config/` and `templates/`, in
-     * which the classes of CakePHP keep their global names
+     * Runs the rules of `upgrade namespace` on the code (`src/`, `tests/`), then on `config/`, `templates/` and the
+     * entry files of `webroot/`, which stay without a namespace
      *
      * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
      * @param string|null $namespace App.namespace of an application, or null for a plugin
@@ -525,25 +551,27 @@ class UpgradeShell extends AppShell
             }
         }
         $appNamespace = $namespace ?? Configure::read('App.namespace');
+        $entryFiles = array_filter($plan->entryFiles(), static fn(string $file): bool => str_ends_with($file, '.php'));
         $runs = [
             [$plan->codePaths(), true, ['php']],
-            [$plan->configPaths(), false, ['php', 'ctp']],
+            [array_merge($plan->configPaths(), array_values($entryFiles)), false, ['php', 'ctp']],
         ];
         $code = 0;
-        foreach ($runs as [$paths, $renameCore, $extensions]) {
+        foreach ($runs as [$paths, $namespaced, $extensions]) {
             if ($paths === []) {
                 continue;
             }
             $file = (string)tempnam(TMP, 'upgrade-plan-');
             file_put_contents($file, json_encode([
-                'files' => $renameCore ? $plan->files : [],
-                'aliases' => $renameCore ? $plan->aliases : [],
+                'files' => $namespaced ? $plan->files : [],
+                'aliases' => $namespaced ? $plan->aliases : [],
                 'classes' => $plan->classes,
                 'namespace' => is_string($appNamespace) && $appNamespace !== '' ? $appNamespace : null,
                 'shortNames' => empty($this->params['no-short-names']),
                 'indexPaths' => array_values(array_unique($indexPaths)),
-                'renameCore' => $renameCore,
                 'extensions' => $extensions,
+                // The templates get their use statements from _importNames()
+                'keepNames' => !$namespaced && is_dir($plan->root . DS . 'templates') ? [$plan->root . DS . 'templates'] : [],
             ]));
             $command = [
                 PHP_BINARY,
@@ -733,12 +761,17 @@ class UpgradeShell extends AppShell
     protected function _copyForDryRun($root, $name)
     {
         $copy = TMP . 'upgrade-dry-run-' . getmypid() . DS . $name . DS . basename($root);
-        $skip = ['vendor', 'node_modules', '.git', 'tmp', 'logs', 'webroot', 'plugins'];
+        $skip = ['vendor', 'node_modules', '.git', 'tmp', 'logs', 'plugins'];
+        // Of webroot/, only the PHP files of the entry files
+        $filter = static function (SplFileInfo $file, $key, RecursiveDirectoryIterator $iterator) use ($skip): bool {
+            if ($iterator->getSubPath() === 'webroot') {
+                return $file->isFile() && $file->getExtension() === 'php';
+            }
+
+            return !($iterator->getSubPath() === '' && $file->isDir() && in_array($file->getFilename(), $skip, true));
+        };
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveCallbackFilterIterator(
-                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-                static fn(SplFileInfo $file, $key, RecursiveDirectoryIterator $iterator): bool => !($iterator->getSubPath() === '' && $file->isDir() && in_array($file->getFilename(), $skip, true)),
-            ),
+            new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), $filter),
             RecursiveIteratorIterator::SELF_FIRST,
         );
         mkdir($copy, 0777, true);
