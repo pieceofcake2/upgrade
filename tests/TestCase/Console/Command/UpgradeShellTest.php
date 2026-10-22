@@ -562,6 +562,65 @@ PHP, $this->_read('Lib/Legacy.php'));
     }
 
     /**
+     * The rules of class-name-strings, run by Rector on a copy of the fixtures, with the short names and without
+     *
+     * @return void
+     */
+    public function testRectorClassNameStrings(): void
+    {
+        $fixtures = dirname(__DIR__, 3) . DS . 'fixtures' . DS . 'rector' . DS;
+        Configure::write('App.namespace', 'App');
+        try {
+            foreach (['class-name-strings-expected' => [], 'class-name-strings-no-short-names-expected' => ['--no-short-names']] as $expected => $options) {
+                $dir = $this->_root . $expected . DS;
+                new Folder($dir, true);
+                foreach (glob($fixtures . 'class-name-strings' . DS . '*.php') ?: [] as $file) {
+                    copy($file, $dir . basename($file));
+                }
+
+                ob_start();
+                $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', ...$options, $dir]);
+                $output = (string)ob_get_clean();
+
+                $this->assertSame(0, $code, $output);
+                foreach (glob($fixtures . $expected . DS . '*.php') ?: [] as $file) {
+                    $this->assertFileEquals($file, $dir . basename($file), $expected . '/' . basename($file));
+                }
+            }
+        } finally {
+            Configure::delete('App.namespace');
+        }
+    }
+
+    /**
+     * The rector command passes App.namespace and --no-short-names to the rules in environment variables
+     *
+     * @return void
+     */
+    public function testRectorEnvironment(): void
+    {
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', '_runRector'], [$this->out, $this->out, $this->getMock('ConsoleInput', [], [], '', false)]);
+        $env = [];
+        $this->Shell->expects($this->exactly(2))->method('_runRector')->willReturnCallback(function (array $command) use (&$env): int {
+            $env[] = [getenv('UPGRADE_SHORT_NAMES'), getenv('UPGRADE_APP_NAMESPACE'), is_file((string)getenv('UPGRADE_RECTOR_REPORT'))];
+
+            return 0;
+        });
+
+        Configure::write('App.namespace', 'Acme');
+        try {
+            $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', 'src']);
+            $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', '--no-short-names', 'src']);
+        } finally {
+            Configure::delete('App.namespace');
+        }
+
+        $this->assertSame([['1', 'Acme', true], ['0', 'Acme', true]], $env);
+        $this->assertFalse(getenv('UPGRADE_SHORT_NAMES'));
+        $this->assertFalse(getenv('UPGRADE_RECTOR_REPORT'));
+    }
+
+    /**
      * The command of Rector: the paths, the configuration of the rules and --dry-run
      *
      * @return void
@@ -606,7 +665,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         $this->Shell->params['rules'] = 'variadic-arguments';
         $this->Shell->rector();
 
-        $this->assertSame('Unknown rules: nothing. Available: namespaced-classes, variadic-arguments', $errors[0]);
+        $this->assertSame('Unknown rules: nothing. Available: class-name-strings, namespaced-classes, variadic-arguments', $errors[0]);
         $this->assertSame('Give the paths to process, e.g. src tests.', $errors[1]);
     }
 }

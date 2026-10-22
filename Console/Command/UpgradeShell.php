@@ -130,8 +130,12 @@ class UpgradeShell extends AppShell
         if (!empty($this->params['dry-run'])) {
             $command[] = '--dry-run';
         }
+        $namespace = Configure::read('App.namespace');
 
-        return $this->_runRectorWithReport($command, []);
+        return $this->_runRectorWithReport($command, [
+            'UPGRADE_SHORT_NAMES' => empty($this->params['no-short-names']) ? '1' : '0',
+            'UPGRADE_APP_NAMESPACE' => is_string($namespace) ? $namespace : '',
+        ]);
     }
 
     /**
@@ -1049,6 +1053,10 @@ class UpgradeShell extends AppShell
                     'dry-run' => [
                         'short' => 'd',
                         'help' => __d('cake_console', 'Show the changes without writing them.'),
+                        'boolean' => true,
+                    ],
+                    'no-short-names' => [
+                        'help' => __d('cake_console', 'class-name-strings: keep the short names (\'Auth\', \'DebugKit.Toolbar\'), which CakePHP looks up when the application runs; only replace the full class names.'),
                         'boolean' => true,
                     ],
                 ],
