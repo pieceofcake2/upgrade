@@ -4,6 +4,8 @@ namespace App\Controller;
 use App\Model\Post;
 use Cake\Controller\Component\SessionComponent;
 use App\Controller\Component\GreetingComponent;
+use Cake\Controller\Component\RequestHandlerComponent;
+use Cake\View\JsonView;
 use Cake\Controller\Component\AuthComponent;
 use Cake\Controller\Component\Auth\BlowfishPasswordHasher;
 use Cake\Controller\Component\Auth\FormAuthenticate;
@@ -14,7 +16,6 @@ use Cake\View\Helper\HtmlHelper;
 use Cake\View\Helper\TextHelper;
 use Cake\Utility\CakeText;
 use Cake\View\Helper\JsHelper;
-use Cake\View\JsonView;
 use Cake\View\XmlView;
 use Cake\View\Helper\NumberHelper;
 use Cake\Controller\Component\CookieComponent;
@@ -31,6 +32,7 @@ class PostsController extends AppController
         GreetingComponent::class,
         'Mailer' => ['className' => GreetingComponent::class],
         'DebugKit.Toolbar',
+        RequestHandlerComponent::class => ['viewClassMap' => ['json' => JsonView::class, 'csv' => 'CsvView.Csv']],
         AuthComponent::class => [
             'authenticate' => [
                 'all' => ['passwordHasher' => BlowfishPasswordHasher::class],
@@ -57,9 +59,13 @@ class PostsController extends AppController
         $this->Post->bindModel(['hasMany' => ['Tag' => ['className' => Post::class]]]);
         $email = new CakeEmail();
         $email->transport(DebugTransport::class);
+        $this->loadModel(Post::class);
+        $this->loadModel('Blog.Comment');
+        $this->RequestHandler->viewClassMap('json', JsonView::class);
+        $this->RequestHandler->viewClassMap(['xml' => XmlView::class]);
         // Other strings stay
         $this->set('component', 'Session');
         $this->Session->setFlash('Auth');
-        $this->loadModel('Post');
+        $this->Paginator->paginate('Post');
     }
 }

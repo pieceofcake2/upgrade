@@ -254,8 +254,9 @@ bin/cake upgrade rector --rules class-name-strings src tests config
   `EmailConfig` と `CakeEmail::transport()` の `transport`、`Exception.renderer`、`Error.handler` と
   `Exception.handler` (`'ErrorHandler::handleError'` は `[ErrorHandler::class, 'handleError']` になります。
   `consoleHandler` も同じです)、`Dispatcher.filters`、`Acl.classname`、`routeClass` と
-  `Router::defaultRouteClass()`、`Components->load()`、`ClassRegistry::init()`。ほかの文字列
-  (`$this->loadModel('Post')` や `$this->Paginator->paginate('Post')` など) はそのままです。
+  `Router::defaultRouteClass()`、RequestHandlerComponent の `viewClassMap` (設定と `viewClassMap()`)、
+  `Components->load()`、`Helpers->load()`、`Behaviors->load()` (`attach()` も)、`loadModel()`、
+  `ClassRegistry::init()`。ほかの文字列 (`$this->Paginator->paginate('Post')` など) はそのままです。
 - 名前は、CakePHP がその名前で見つけるクラスになります。`App.namespace` にあるアプリケーションのクラス、
   `'Plugin.Name'` ならそのプラグインのクラス、CakePHP のクラスの順に探します。CakePHP はバックスラッシュの
   ないクラス名を短い名前として扱うので、使うのは名前空間付きのクラスだけです。グローバルなクラスの名前と、
@@ -417,8 +418,8 @@ composer dump-autoload
   `declare` ブロックのあるファイル、PHP として正しくないファイルは、グローバルのままです。複数のファイルで
   宣言されているクラスも、ほかのファイルでの使用箇所を書き換えません。
 - アプリケーションやプラグインの外で、そのクラスをグローバルな名前で使うコード (プラグインをアプリケーションの
-  後で名前空間に移した場合の、アプリケーションのコードなど) と、上に挙げた以外の文字列 (`loadModel()` の
-  `'Post'` など。`App::className()` が見つけます)。
+  後で名前空間に移した場合の、アプリケーションのコードなど) と、上に挙げた以外の文字列 (`paginate()` の
+  `'Post'` など。CakePHP はモデルの別名として読みます)。
 - 古いクラス名を含むデータ (キャッシュやセッションにシリアライズしたオブジェクト)。キャッシュを消してください。
 - `use` の並び順。コードスタイルの修正ツールを実行してください。
 

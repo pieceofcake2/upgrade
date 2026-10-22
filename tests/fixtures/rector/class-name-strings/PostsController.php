@@ -13,6 +13,7 @@ class PostsController extends AppController
         'Greeting',
         'Mailer' => ['className' => 'Greeting'],
         'DebugKit.Toolbar',
+        'RequestHandler' => ['viewClassMap' => ['json' => 'Json', 'csv' => 'CsvView.Csv']],
         'Auth' => [
             'authenticate' => [
                 'all' => ['passwordHasher' => 'Blowfish'],
@@ -39,9 +40,13 @@ class PostsController extends AppController
         $this->Post->bindModel(['hasMany' => ['Tag' => ['className' => 'Post']]]);
         $email = new CakeEmail();
         $email->transport('Debug');
+        $this->loadModel('Post');
+        $this->loadModel('Blog.Comment');
+        $this->RequestHandler->viewClassMap('json', 'Json');
+        $this->RequestHandler->viewClassMap(['xml' => 'Xml']);
         // Other strings stay
         $this->set('component', 'Session');
         $this->Session->setFlash('Auth');
-        $this->loadModel('Post');
+        $this->Paginator->paginate('Post');
     }
 }

@@ -246,8 +246,9 @@ bin/cake upgrade rector --rules class-name-strings src tests config
   `ConnectionManager::create()`, the `transport` of `EmailConfig` and `CakeEmail::transport()`,
   `Exception.renderer`, `Error.handler` and `Exception.handler` (`'ErrorHandler::handleError'` becomes
   `[ErrorHandler::class, 'handleError']`, also for the `consoleHandler`), `Dispatcher.filters`, `Acl.classname`,
-  `routeClass` and `Router::defaultRouteClass()`, `Components->load()` and `ClassRegistry::init()`. Other strings
-  stay, e.g. `$this->loadModel('Post')` and `$this->Paginator->paginate('Post')`.
+  `routeClass` and `Router::defaultRouteClass()`, the `viewClassMap` of RequestHandlerComponent (its setting and
+  `viewClassMap()`), `Components->load()`, `Helpers->load()`, `Behaviors->load()` (and `attach()`), `loadModel()`
+  and `ClassRegistry::init()`. Other strings stay, e.g. `$this->Paginator->paginate('Post')`.
 - A name becomes the class that CakePHP finds for it: the class of the application in `App.namespace`, the class of
   the plugin for `'Plugin.Name'`, or the class of CakePHP, in this order. Only namespaced classes are used, as CakePHP
   reads a class name without a backslash as a short name; names of global classes, and names that the processed code
@@ -397,8 +398,8 @@ What `namespace` does not change, as the command lists it or as you check it:
   `declare` block, or that is not valid PHP, stays global. So do the classes declared in more than one file: their
   uses in other files are not renamed.
 - Code outside the application or plugin that names its classes by their global names, e.g. an application that uses
-  the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `loadModel()`,
-  which `App::className()` finds).
+  the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `paginate()`,
+  which CakePHP reads as a model alias).
 - Data with the old class names: serialized objects in caches and sessions. Clear the caches.
 - The order of the `use` statements: run your code style fixer.
 

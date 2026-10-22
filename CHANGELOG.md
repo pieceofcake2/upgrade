@@ -17,8 +17,9 @@
   `config/core.php` and switches `composer.json` to PSR-4. It needs the layout of pieceofcake2/app and stops on the
   CakePHP 2 layout. `--dry-run` shows the changes as a diff
 - New `class-name-strings` rules: the class names in the settings that name a class (`$components`, `$helpers`,
-  `$uses`, the associations, engines, handlers, `Dispatcher.filters`, ...) become `::class`. `--no-short-names` keeps
-  the short names (`'Auth'`, `'DebugKit.Toolbar'`)
+  `$uses`, the associations, engines, handlers, `Dispatcher.filters`, `viewClassMap`, `Components->load()`,
+  `Helpers->load()`, `Behaviors->load()`, `loadModel()`, ...) become `::class`. `--no-short-names` keeps the short
+  names (`'Auth'`, `'DebugKit.Toolbar'`)
 - `namespaced-classes`: a comparison with the class of an object (`get_class($x) === 'CakeRequest'`) becomes
   `instanceof` when no class of CakePHP or of the processed code extends the class; otherwise it keeps `::class`, and
   the command lists the place for a review. The names in docblocks get `use` statements, as the names of the code,

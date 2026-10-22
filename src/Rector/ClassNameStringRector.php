@@ -31,7 +31,8 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  * `authorize`, `passwordHasher`), the engines of `Cache::config()`, `CakeLog::config()` and of the helpers, the
  * `datasource` of the connections, the email `transport`, the `Session` handler, `Exception.renderer`, the error and
  * exception handlers (as `[ErrorHandler::class, 'handleError']`), `Dispatcher.filters`, `Acl.classname`,
- * `routeClass`, `Components->load()` and `ClassRegistry::init()`. Other strings stay.
+ * `routeClass`, `viewClassMap`, `Components->load()`, `Helpers->load()`, `Behaviors->load()`, `loadModel()` and
+ * `ClassRegistry::init()`. Other strings stay.
  *
  * A name is replaced by the class that CakePHP finds for it now: the class of the application (in `App.namespace`),
  * of the plugin of a `Plugin.Name`, or of CakePHP, in this order. Only namespaced classes are used, as CakePHP reads a
@@ -312,7 +313,8 @@ CODE_SAMPLE,
     }
 
     /**
-     * `$this->Components->load('Auth', [...])`, `$email->transport('Smtp')`, `$this->Post->bindModel([...])`
+     * `$this->Components->load('Auth', [...])`, `Helpers->load()`, `Behaviors->load()`, `loadModel()`,
+     * `viewClassMap()`, `$email->transport('Smtp')`, `$this->Post->bindModel([...])`
      *
      * @param \PhpParser\Node\Expr\MethodCall $call Call
      * @return bool Whether it changed
@@ -324,19 +326,24 @@ CODE_SAMPLE,
         }
         $args = $call->getArgs();
         $method = $this->getName($call->name);
-        if ($method === 'load' && $call->var instanceof PropertyFetch && $this->isName($call->var->name, 'Components') && isset($args[0])) {
-            $changed = false;
-            if (isset($args[1]) && $args[1]->value instanceof Array_) {
-                $changed = $this->setting($args[1]->value, 'className', 'component');
-                $changed = $this->componentSettings($args[1]->value) || $changed;
-            }
-            if ($this->classNameOf($args[1]->value ?? null) === null) {
-                $changed = $this->replace($args[0]->value, 'component', static function (Expr $class) use ($args): void {
-                    $args[0]->value = $class;
-                }) || $changed;
+        $collection = $call->var instanceof PropertyFetch ? $this->getName($call->var->name) : null;
+        $collections = ['Components' => 'component', 'Helpers' => 'helper', 'Behaviors' => 'behavior'];
+        if (in_array($method, ['load', 'attach'], true) && isset($collections[(string)$collection], $args[0])) {
+            return $this->loadObject($args, $collections[(string)$collection]);
+        }
+        if ($method === 'loadModel' && isset($args[0])) {
+            return $this->replace($args[0]->value, 'model', static function (Expr $class) use ($args): void {
+                $args[0]->value = $class;
+            });
+        }
+        if ($method === 'viewClassMap' && isset($args[0])) {
+            if ($args[0]->value instanceof Array_) {
+                return $this->viewClassMap($args[0]->value);
             }
 
-            return $changed;
+            return isset($args[1]) && $this->replace($args[1]->value, 'view', static function (Expr $class) use ($args): void {
+                $args[1]->value = $class;
+            });
         }
         if ($method === 'transport' && count($args) === 1) {
             return $this->replace($args[0]->value, 'transport', static function (Expr $class) use ($args): void {
@@ -503,6 +510,57 @@ CODE_SAMPLE,
             if ($item->key instanceof String_ && in_array($item->key->value, ['authenticate', 'authorize'], true)) {
                 $changed = $this->authObjects($item->value, $item->key->value, static function (Expr $expr) use ($item): void {
                     $item->value = $expr;
+                }) || $changed;
+            } elseif ($item->key instanceof String_ && $item->key->value === 'viewClassMap' && $item->value instanceof Array_) {
+                $changed = $this->viewClassMap($item->value) || $changed;
+            }
+        }
+
+        return $changed;
+    }
+
+    /**
+     * `Components->load('Auth', [...])`, `Helpers->load()`, `Behaviors->load()` (and `attach()`): the class, or the
+     * `className` of the settings, which make the first argument an alias
+     *
+     * @param array<\PhpParser\Node\Arg> $args The arguments
+     * @param string $kind The kind of the object
+     * @return bool Whether it changed
+     */
+    private function loadObject(array $args, string $kind): bool
+    {
+        $changed = false;
+        $settings = isset($args[1]) && $args[1]->value instanceof Array_ ? $args[1]->value : null;
+        if ($settings !== null) {
+            $changed = $this->setting($settings, 'className', $kind);
+            $changed = match ($kind) {
+                'component' => $this->componentSettings($settings),
+                'helper' => $this->setting($settings, 'engine', 'utility'),
+                default => false,
+            } || $changed;
+        }
+        if ($this->classNameOf($settings) === null) {
+            $changed = $this->replace($args[0]->value, $kind, static function (Expr $class) use ($args): void {
+                $args[0]->value = $class;
+            }) || $changed;
+        }
+
+        return $changed;
+    }
+
+    /**
+     * The view classes of RequestHandlerComponent, by type: `['json' => 'MyJson']`
+     *
+     * @param \PhpParser\Node\Expr\Array_ $map The map
+     * @return bool Whether it changed
+     */
+    private function viewClassMap(Array_ $map): bool
+    {
+        $changed = false;
+        foreach ($map->items as $item) {
+            if ($item->key !== null) {
+                $changed = $this->replace($item->value, 'view', static function (Expr $class) use ($item): void {
+                    $item->value = $class;
                 }) || $changed;
             }
         }

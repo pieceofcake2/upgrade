@@ -8,4 +8,11 @@ class Post extends AppModel
     public $belongsTo = ['Author' => ['className' => 'Post'], 'Blog.User'];
 
     public $hasAndBelongsToMany = ['Post' => ['with' => 'Post', 'joinTable' => 'posts_posts']];
+
+    public function tree()
+    {
+        $this->Behaviors->load('Tree', ['left' => 'lft']);
+        $this->Behaviors->attach('Containable');
+        $this->Behaviors->load('Ordered', ['className' => 'Tree']);
+    }
 }
