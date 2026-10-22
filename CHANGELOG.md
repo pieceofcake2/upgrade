@@ -19,6 +19,12 @@
   removes `App::uses()`, replaces the class names in strings by `::class`, adds `App.namespace` to
   `config/core.php` and switches `composer.json` to PSR-4. It needs the layout of pieceofcake2/app and stops on the
   CakePHP 2 layout. `--dry-run` shows the changes as a diff
+- `namespace` imports the classes of CakePHP and of the application with `use` statements in `config/`, the entry
+  files (`bin/cake`, `webroot/index.php`, `webroot/test.php`) and the templates, which stay without a namespace. A
+  template gets them at the top, in its first block of PHP or in a new `<?php ... ?>` block, as the templates of
+  CakePHP 5; a template that names no class does not change. `layout` still creates the entry files with the global
+  names, which work in a global application
+  ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - New `class-name-strings` rules: the class names in the settings that name a class (`$components`, `$helpers`,
   `$uses`, the associations, engines, handlers, `Dispatcher.filters`, `viewClassMap`, `Components->load()`,
   `Helpers->load()`, `Behaviors->load()`, `loadModel()`, ...) become `::class`. `--no-short-names` keeps the short

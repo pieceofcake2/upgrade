@@ -327,7 +327,9 @@ CakePHP 2 の構成のエントリーファイルはその構成のパスを定�
 置き換えます。`config/define.php`、`bin/cake`、`webroot/index.php`、`webroot/test.php`、`webroot/.htaccess` と
 `tmp/`・`logs/` のディレクトリは、なければ作成します (すでに新しい構成のアプリケーションでも同じです)。これらの
 ファイルは pieceofcake2/app のファイルのコピーとしてこのプラグインの `resources/skeleton/` にあるので、
-pieceofcake2/app のバージョンには左右されません。既存のファイルを上書きすることはありません。
+pieceofcake2/app のバージョンには左右されません。既存のファイルを上書きすることはありません。これらのファイルは
+CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher`) で使うので、名前空間のないアプリケーションでも
+動きます。`namespace` を実行すると `use` を付けます。
 
 - 古いエントリーファイル (`app/webroot/index.php`、`app/webroot/test.php`、`app/Console/cake.php`) で定義している
   アプリケーション独自の定数 (例: `define('SITE_NAME', 'Blog')`) は、すべてのエントリーファイルが読み込む新しい
@@ -406,9 +408,25 @@ pieceofcake2/app のバージョンには左右されません。既存のファ
   クラスについても書き換えます。
 - 設定のクラス名を [`class-name-strings`](#class-name-strings) と同じように書き換えます。`--no-short-names` を
   付けた場合に残る短い名前は、`App::className()` が見つけるのでそのまま動きます。
-- `config/` と `templates/` では、CakePHP のファイルと同じように CakePHP のクラスはグローバルな名前のままです。
-  名前を変えるのはアプリケーションのクラスだけで、設定のクラス名も書き換えます。テンプレートでは完全修飾名
-  (`\App\Utility\Slug::normalize()`) になります。
+- `config/`、エントリーファイル (`bin/cake`、`webroot/` の PHP ファイル)、テンプレートは名前空間を付けずに、
+  使っている CakePHP とアプリケーションのクラスに `use` を付けます (`Configure::write()` には
+  `use Cake\Core\Configure;`)。変わるのは名前と設定のクラス名だけで、ほかのコードはそのままです。`use` は
+  ファイルの docblock の後に置き、ファイルにもとからある `use` (`config/core.php` の
+  `use Symfony\Component\Dotenv\Dotenv;`) はその先頭に残します。
+- テンプレートでは、CakePHP 5 のテンプレートと同じように、先頭に `use` を置きます。テンプレートが PHP の
+  ブロックで始まる場合はそのブロックの中 (docblock の後) に、そうでなければ新しいブロックに置きます。
+
+  ```php
+  <?php
+  use Cake\Core\Configure;
+  ?>
+  <h2><?php echo h($message); ?></h2>
+  <?php if (Configure::read('debug') > 0) : ?>
+      <?php echo $this->element('exception_stack_trace'); ?>
+  <?php endif; ?>
+  ```
+
+  クラスを使っていないテンプレートは変更しません。テンプレートの docblock の名前 (`@var View $this`) もそのままです。
 
 そして、設定を変更します。
 

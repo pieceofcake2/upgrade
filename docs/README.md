@@ -313,7 +313,9 @@ The entry files of the CakePHP 2 layout define its paths, so the entry files of 
 `config/define.php`, `bin/cake`, `webroot/index.php`, `webroot/test.php` and `webroot/.htaccess`, and the directories
 of `tmp/` and `logs/`, are created when they are missing, also in an application already in the new layout. The plugin
 ships copies of these files of pieceofcake2/app in `resources/skeleton/`, so the files do not depend on the version of
-pieceofcake2/app. An existing file is never overwritten.
+pieceofcake2/app. An existing file is never overwritten. The files use the global names of the classes of CakePHP
+(`ShellDispatcher`, `Dispatcher`), which work in a global application; `namespace` imports them with `use`
+statements.
 
 - The constants of your own that the old entry files define (`app/webroot/index.php`, `app/webroot/test.php`,
   `app/Console/cake.php`), e.g. `define('SITE_NAME', 'Blog')`, are added to the new `config/define.php`, which all
@@ -388,9 +390,26 @@ Then it changes the code with Rector:
   classes of the application too.
 - The class names of the settings, as [`class-name-strings`](#class-name-strings) does them. Short names that
   `App::className()` resolves keep working when you pass `--no-short-names`.
-- In `config/` and `templates/`, the classes of CakePHP keep their global names, as in the files of CakePHP: only the
-  classes of the application are renamed, and the class names of the settings change. The templates get fully
-  qualified names (`\App\Utility\Slug::normalize()`).
+- `config/`, the entry files (`bin/cake`, the PHP files of `webroot/`) and the templates stay without a namespace,
+  and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
+  `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
+  class names of the settings. The use statements go after the docblock of the file, and after its own use statements
+  (`use Symfony\Component\Dotenv\Dotenv;` of `config/core.php`), which stay first.
+- A template gets the use statements at the top, as in the templates of CakePHP 5: in its first block of PHP when it
+  starts with one (after the docblock), else in a new block:
+
+  ```php
+  <?php
+  use Cake\Core\Configure;
+  ?>
+  <h2><?php echo h($message); ?></h2>
+  <?php if (Configure::read('debug') > 0) : ?>
+      <?php echo $this->element('exception_stack_trace'); ?>
+  <?php endif; ?>
+  ```
+
+  A template that names no class does not change, and the docblocks of the templates keep their names
+  (`@var View $this`).
 
 And the configuration:
 
