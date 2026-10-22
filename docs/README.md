@@ -190,8 +190,10 @@ class PostsController extends AppController
 }
 ```
 
-- The classes of CakePHP in code (`extends`, `new`, type declarations, static calls, `instanceof`, `catch`) get a
-  `use` statement; in docblocks they become fully qualified names, e.g. `@param \Cake\Controller\Controller`.
+- The classes of CakePHP in code (`extends`, `new`, type declarations, static calls, `instanceof`, `catch`) and in
+  docblocks get a `use` statement, e.g. `@param Controller` with `use Cake\Controller\Controller;`. A name stays
+  fully qualified when its short name already names another class in the file. The result is the same whichever
+  version of pieceofcake2/cakephp is installed.
 - A string with the global name of a class of CakePHP that is compared with the class of an object changes:
   `get_class()`, `get_parent_class()`, `get_called_class()`, `$object::class` or `static::class`, with `===`,
   `==`, `!==`, `!=`, `in_array()`, `switch` or `match`.
@@ -357,9 +359,10 @@ Then it changes the code with Rector:
   `App\Test\TestCase\Controller` for `tests/TestCase/Controller/`, `App\Test\Fixture` for `tests/Fixture/`, and
   `<Plugin>\...` in a plugin, as CakePHP looks plugin classes up as `<Plugin>\<Type>\<Class>`.
 - `App::uses()` is removed: Composer loads the classes.
-- The uses of the classes of the application and of CakePHP get the namespaced names, with `use` statements; the
-  global classes that the code uses (PHP, other packages, `AppController` in a plugin) are imported too
-  (`use Exception;`), and the global names in docblocks get a leading backslash (`@param \ArrayObject`).
+- The uses of the classes of the application and of CakePHP, in the code and in docblocks, get the namespaced names,
+  with `use` statements; the global classes that the code and the docblocks use (PHP, other packages,
+  `AppController` in a plugin) are imported too (`use Exception;`, `use ArrayObject;` for `@param ArrayObject`). A
+  name stays fully qualified when its short name names another class, e.g. a class of the namespace of the file.
 - The strings that PHP reads as class names become `::class`: `class_exists()`, `is_a()`, `is_subclass_of()`,
   `method_exists()`, `new ReflectionClass()`, the callables `['Class', 'method']` and `'Class::method'` of
   `call_user_func()`, `array_map()` and the other functions, and the mocks and assertions of PHPUnit

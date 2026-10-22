@@ -2,13 +2,15 @@
 
 namespace App\Model;
 
+use Comment;
+use ArrayObject;
 use App\Model\Behavior\SluggableBehavior;
 use Cake\Model\Behavior\TreeBehavior;
 
 /**
  * Post
  *
- * @property \Comment $Comment
+ * @property Comment $Comment
  */
 class Post extends AppModel
 {
@@ -21,7 +23,7 @@ class Post extends AppModel
     ];
 
     /**
-     * @param \ArrayObject $options Options
+     * @param ArrayObject $options Options
      * @return array
      */
     public function published($options)

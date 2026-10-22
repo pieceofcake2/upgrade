@@ -2,6 +2,7 @@
 
 namespace Cake\Routing;
 
+use Cake\Event\CakeEvent;
 use Cake\Event\CakeEventListener;
 
 /**
@@ -18,7 +19,7 @@ class Dispatcher implements CakeEventListener
     }
 
     /**
-     * @param \Cake\Event\CakeEvent $event Event
+     * @param CakeEvent $event Event
      * @return void
      */
     public function parseParams($event)

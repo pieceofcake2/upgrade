@@ -2,13 +2,13 @@
 
 namespace App\Controller\Component;
 
-use Cake\Controller\Component;
 use Cake\Controller\Controller;
+use Cake\Controller\Component;
 
 class GreetingComponent extends Component
 {
     /**
-     * @param \Cake\Controller\Controller $controller Controller
+     * @param Controller $controller Controller
      * @return void
      */
     public function startup(Controller $controller)

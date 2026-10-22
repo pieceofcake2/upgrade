@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 use PieceOfCake2\Upgrade\Rector\ClassNameArgumentRector;
 use PieceOfCake2\Upgrade\Rector\ClassNameStringRector;
+use PieceOfCake2\Upgrade\Rector\DocblockNameImportRector;
 use PieceOfCake2\Upgrade\Rector\NamespacedClassNameRector;
 use PieceOfCake2\Upgrade\Rector\NamespaceFromPathRector;
 use PieceOfCake2\Upgrade\Rector\RemoveAppUsesRector;
@@ -50,5 +51,10 @@ $config = RectorConfig::configure()
 if ($renamed !== []) {
     $config->withConfiguredRule(RenameClassRector::class, $renamed);
 }
+// After RenameClassRector: imports the names of the docblocks as the names of the code
+$config->withConfiguredRule(DocblockNameImportRector::class, [
+    DocblockNameImportRector::CLASSES => array_values($classes),
+    DocblockNameImportRector::GLOBALS => true,
+]);
 
 return $config;

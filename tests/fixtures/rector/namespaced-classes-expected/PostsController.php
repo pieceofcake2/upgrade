@@ -1,7 +1,8 @@
 <?php
+use Cake\Controller\Controller;
+use Cake\Network\CakeResponse;
 use Cake\Core\App;
 use Cake\Network\CakeRequest;
-use Cake\Network\CakeResponse;
 use Cake\Model\Model;
 use Cake\Controller\Component\SessionComponent;
 use Cake\Controller\Component\AuthComponent;
@@ -11,7 +12,6 @@ use Cake\Error\MethodNotAllowedException;
 use Cake\Event\CakeEventManager;
 use Cake\Error\ForbiddenException;
 use Cake\Error\UnauthorizedException;
-use Cake\Controller\Controller;
 use Cake\Controller\Component;
 use Cake\Network\Email\CakeEmail;
 use Cake\Core\Configure;
@@ -89,8 +89,8 @@ class MySessionComponent extends SessionComponent
 class GreetingComponent extends Component
 {
     /**
-     * @param \Cake\Controller\Controller $controller Controller
-     * @return \Cake\Network\CakeResponse|null
+     * @param Controller $controller Controller
+     * @return CakeResponse|null
      */
     public function startup(Controller $controller)
     {

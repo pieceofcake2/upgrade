@@ -32,7 +32,8 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  *
  * The names of the classes of the file do not change, so the other rules (`RenameClassRector`) rename the uses of the
  * classes in the other files. The global names in docblocks get a leading backslash, e.g. `@param \ArrayObject`, so
- * that they still name the global classes in the namespace; the names in the code are imported by Rector.
+ * that they still name the global classes in the namespace; DocblockNameImportRector then imports them, as Rector
+ * imports the names in the code.
  *
  * A file that declares a copy of a class of CakePHP in the `Cake` namespace (a core class override) also gets the
  * `class_alias()` of the global name, as the files of CakePHP have.

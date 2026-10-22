@@ -21,6 +21,6 @@
   the short names (`'Auth'`, `'DebugKit.Toolbar'`)
 - `namespaced-classes`: a comparison with the class of an object (`get_class($x) === 'CakeRequest'`) becomes
   `instanceof` when no class of CakePHP or of the processed code extends the class; otherwise it keeps `::class`, and
-  the command lists the place for a review. The names in docblocks stay fully qualified, also when
-  pieceofcake2/cakephp 2.13 is installed
+  the command lists the place for a review. The names in docblocks get `use` statements, as the names of the code,
+  whichever version of pieceofcake2/cakephp is installed
 - Requires nikic/php-parser ^5.0, which `namespace` uses outside Rector

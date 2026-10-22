@@ -2,11 +2,11 @@
 
 namespace App\Controller;
 
+use Cake\Error\NotFoundException;
 use App\Model\Post;
 use Cake\Controller\Component\PaginatorComponent;
 use App\Controller\Component\GreetingComponent;
 use App\Utility\Slug;
-use Cake\Error\NotFoundException;
 use DateTime;
 use Cake\View\XmlView;
 use Cake\Controller\Component\RequestHandlerComponent;
@@ -25,7 +25,7 @@ class PostsController extends AppController
     /**
      * @param string $slug Slug
      * @return void
-     * @throws \Cake\Error\NotFoundException
+     * @throws NotFoundException
      */
     public function view($slug)
     {

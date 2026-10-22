@@ -196,8 +196,10 @@ class PostsController extends AppController
 }
 ```
 
-- コードの中の CakePHP のクラス (`extends`、`new`、型宣言、静的呼び出し、`instanceof`、`catch`) には `use` を
-  付けます。docblock の中では完全修飾名になります (例: `@param \Cake\Controller\Controller`)。
+- コードの中 (`extends`、`new`、型宣言、静的呼び出し、`instanceof`、`catch`) と docblock の中の CakePHP のクラスには
+  `use` を付けます (例: `use Cake\Controller\Controller;` を付けて `@param Controller`)。短い名前がファイルの中で
+  すでに別のクラスを指している場合は、完全修飾名のままにします。インストールされている pieceofcake2/cakephp の
+  バージョンにかかわらず、同じ結果になります。
 - オブジェクトのクラスと比べている、CakePHP のクラスのグローバルな名前の文字列を書き換えます。対象は
   `get_class()`、`get_parent_class()`、`get_called_class()`、`$object::class`、`static::class` と、
   `===`、`==`、`!==`、`!=`、`in_array()`、`switch`、`match` での比較です。
@@ -376,10 +378,10 @@ composer dump-autoload
   `tests/TestCase/Controller/` は `App\Test\TestCase\Controller`、`tests/Fixture/` は `App\Test\Fixture`、
   プラグインでは `<Plugin>\...` です (CakePHP はプラグインのクラスを `<Plugin>\<Type>\<Class>` で探します)。
 - Composer がクラスを読み込むので、`App::uses()` を削除します。
-- アプリケーションと CakePHP のクラスを使う箇所は、`use` を付けた名前空間付きの名前にします。コードが使う
-  グローバルなクラス (PHP、ほかのパッケージ、プラグインの中の `AppController`) にも `use` を付け
-  (`use Exception;`)、docblock の中のグローバルな名前には先頭にバックスラッシュを付けます
-  (`@param \ArrayObject`)。
+- アプリケーションと CakePHP のクラスを使う箇所は、コードでも docblock でも、`use` を付けた名前空間付きの名前に
+  します。コードや docblock が使うグローバルなクラス (PHP、ほかのパッケージ、プラグインの中の `AppController`) にも
+  `use` を付けます (`use Exception;`、`@param ArrayObject` には `use ArrayObject;`)。短い名前が別のクラス (ファイルの
+  名前空間にあるクラスなど) を指す場合は、完全修飾名のままにします。
 - PHP 自身がクラス名として読む文字列を `::class` にします。`class_exists()`、`is_a()`、`is_subclass_of()`、
   `method_exists()`、`new ReflectionClass()`、`call_user_func()` や `array_map()` などに渡す
   `['Class', 'method']` と `'Class::method'`、PHPUnit のモックとアサーション (`getMock()`、`getMockBuilder()`、

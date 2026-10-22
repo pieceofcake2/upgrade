@@ -14,6 +14,7 @@
 
 declare(strict_types=1);
 
+use PieceOfCake2\Upgrade\Rector\DocblockNameImportRector;
 use PieceOfCake2\Upgrade\Rector\NamespacedClassNameRector;
 use Rector\Config\RectorConfig;
 use Rector\Renaming\Rector\Name\RenameClassRector;
@@ -27,4 +28,8 @@ return RectorConfig::configure()
         NamespacedClassNameRector::CLASSES => $classes,
         NamespacedClassNameRector::EXTENDED => require __DIR__ . '/classes/cakephp-extended.php',
         NamespacedClassNameRector::INSTANCEOF => true,
+    ])
+    // Imports the names of the docblocks as the names of the code, also without the classes installed
+    ->withConfiguredRule(DocblockNameImportRector::class, [
+        DocblockNameImportRector::CLASSES => array_values($classes),
     ]);

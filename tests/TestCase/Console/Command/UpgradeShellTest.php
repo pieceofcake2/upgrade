@@ -545,7 +545,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         }
 
         ob_start();
-        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'namespaced-classes', $dir . 'PostsController.php']);
+        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'namespaced-classes', $dir . 'PostsController.php', $dir . 'Conflicts.php']);
         $output = (string)ob_get_clean();
 
         $this->assertSame(0, $code, $output);

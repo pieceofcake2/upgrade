@@ -2,13 +2,13 @@
 
 namespace App\Model\Behavior;
 
-use Cake\Model\ModelBehavior;
 use Cake\Model\Model;
+use Cake\Model\ModelBehavior;
 
 class SluggableBehavior extends ModelBehavior
 {
     /**
-     * @param \Cake\Model\Model $model Model
+     * @param Model $model Model
      * @param array $config Settings
      * @return void
      */
