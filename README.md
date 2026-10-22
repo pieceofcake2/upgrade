@@ -23,7 +23,8 @@ The Markdown documentation is also included in the Composer package, in the plug
 
 - PHP 8.0+
 - pieceofcake2/cakephp 2.12+
-- rector/rector 2.7+ (installed with the plugin), for the `rector` command
+- rector/rector 2.7+ (installed with the plugin), for the `rector` and `namespace` commands
+- pieceofcake2/cakephp 2.13+ for the code that `namespace` and the `namespaced-classes` and `class-name-strings` rules write
 
 ## Installation
 
@@ -35,7 +36,13 @@ Then load the plugin with `CakePlugin::load('Upgrade')` and run `bin/cake upgrad
 (legacy layout: `app/Console/cake upgrade all`). Back up your application first.
 
 `bin/cake upgrade rector` runs the [Rector](https://getrector.com/) rules of the plugin for a change of
-pieceofcake2/cakephp, e.g. `--rules variadic-arguments src tests` or `--rules namespaced-classes src tests`. See [Rector Rules](docs/README.md#rector-rules).
+pieceofcake2/cakephp, e.g. `--rules variadic-arguments src tests`, `--rules namespaced-classes src tests` or
+`--rules class-name-strings src tests config`. See [Rector Rules](docs/README.md#rector-rules).
+
+`bin/cake upgrade layout` moves an application (or a plugin, with `--plugin`) from the CakePHP 2 layout to the
+CakePHP 5 layout of [pieceofcake2/app](https://github.com/pieceofcake2/app) (`config/`, `src/`, `templates/`, ...),
+and `bin/cake upgrade namespace` then moves its classes into a namespace, with `App.namespace` and PSR-4. Run them in
+this order, with `--dry-run` first. See [Layout and Namespace](docs/README.md#layout-and-namespace).
 
 ## Contributing
 

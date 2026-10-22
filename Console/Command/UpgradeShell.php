@@ -17,6 +17,15 @@
  */
 
 use Composer\InstalledVersions;
+use PieceOfCake2\Upgrade\Migration\ComposerJson;
+use PieceOfCake2\Upgrade\Migration\CoreConfig;
+use PieceOfCake2\Upgrade\Migration\EntryFiles;
+use PieceOfCake2\Upgrade\Migration\HeaderFormatter;
+use PieceOfCake2\Upgrade\Migration\LayoutPlan;
+use PieceOfCake2\Upgrade\Migration\Mover;
+use PieceOfCake2\Upgrade\Migration\NamespacePlan;
+use PieceOfCake2\Upgrade\Migration\Paths;
+use PieceOfCake2\Upgrade\Rector\Report;
 
 App::uses('AppShell', 'Console/Command');
 App::uses('Folder', 'Utility');
@@ -89,8 +98,8 @@ class UpgradeShell extends AppShell
     {
         foreach ($this->OptionParser->subcommands() as $command) {
             $name = $command->name();
-            // rector is not a step of the upgrade from CakePHP 1.3
-            if ($name === 'all' || $name === 'rector') {
+            // rector, layout and namespace are not steps of the upgrade from CakePHP 1.3
+            if (in_array($name, ['all', 'rector', 'layout', 'namespace'], true)) {
                 continue;
             }
             $this->out(__d('cake_console', 'Running %s', $name));
@@ -129,8 +138,49 @@ class UpgradeShell extends AppShell
         if (!empty($this->params['dry-run'])) {
             $command[] = '--dry-run';
         }
+        $namespace = Configure::read('App.namespace');
 
-        return $this->_runRector($command);
+        return $this->_runRectorWithReport($command, [
+            'UPGRADE_SHORT_NAMES' => empty($this->params['no-short-names']) ? '1' : '0',
+            'UPGRADE_APP_NAMESPACE' => is_string($namespace) ? $namespace : '',
+        ]);
+    }
+
+    /**
+     * Runs Rector with environment variables for the configuration of the rules, then prints the places that the
+     * rules list for a review
+     *
+     * @param array<string> $command Command and its arguments
+     * @param array<string, string> $env Environment variables
+     * @return int Exit code
+     */
+    protected function _runRectorWithReport(array $command, array $env)
+    {
+        $report = (string)tempnam(TMP, 'upgrade-report-');
+        $env[Report::ENV] = $report;
+        foreach ($env as $name => $value) {
+            putenv($name . '=' . $value);
+        }
+        try {
+            $code = $this->_runRector($command);
+        } finally {
+            foreach (array_keys($env) as $name) {
+                putenv($name);
+            }
+        }
+        $lines = is_file($report) ? array_unique(array_filter(explode("\n", (string)file_get_contents($report)))) : [];
+        if (is_file($report)) {
+            unlink($report);
+        }
+        if ($lines !== []) {
+            sort($lines);
+            $this->out(__d('cake_console', '<warning>Review these places:</warning>'));
+            foreach ($lines as $line) {
+                $this->out('  ' . $line);
+            }
+        }
+
+        return $code;
     }
 
     /**
@@ -168,6 +218,607 @@ class UpgradeShell extends AppShell
         passthru(implode(' ', array_map('escapeshellarg', $command)), $code);
 
         return $code;
+    }
+
+    /**
+     * Moves an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, `app/View/`, ...) to the
+     * layout of pieceofcake2/app (`config/`, `src/`, `templates/`, `resources/locales/`, `tests/`, `webroot/`), or the
+     * configuration, templates, translations and tests of the plugin given with `--plugin`. Run from the root of
+     * the project. Not part of all.
+     *
+     * @return void
+     */
+    public function layout()
+    {
+        $plugin = $this->params['plugin'] ?? null;
+        $root = $plugin ? $this->_pluginPath((string)$plugin) : $this->_projectRoot();
+        if ($root === null) {
+            return;
+        }
+        $plan = $plugin ? LayoutPlan::forPlugin($root) : LayoutPlan::forApplication($root);
+        $dryRun = !empty($this->params['dry-run']);
+        $mover = new Mover($root);
+        $entryFiles = $plan->entryFiles;
+        $nothing = $plan->moves === [] && ($entryFiles === null || ($entryFiles->files === [] && $entryFiles->directories === []));
+        if ($nothing) {
+            $this->out(__d('cake_console', 'Nothing to move: %s is in the layout of pieceofcake2/app.', $plugin ?: $root));
+        } elseif (!$dryRun && !$mover->usesGit()) {
+            $this->out(__d('cake_console', '<warning>Not a Git repository: the files are moved with rename(), so Git does not see them as moves.</warning>'));
+        }
+        $this->_move($plan, $mover, $dryRun, $plugin ? ['View', 'Locale', 'Test', 'templates'] : ['app', 'templates']);
+        if ($entryFiles !== null) {
+            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun);
+        }
+        $composer = $root . DS . 'composer.json';
+        if (is_file($composer) && $plan->paths !== []) {
+            $json = new ComposerJson((string)file_get_contents($composer));
+            $this->_moveComposerPaths($json, $plan->paths, 'composer.json');
+            if (!$dryRun && $json->isChanged()) {
+                file_put_contents($composer, $json->contents());
+            }
+        }
+        $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        if (!$nothing && !$dryRun) {
+            $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace%s` moves the classes into a namespace.', $plugin ? ' --plugin ' . $plugin : ''));
+        }
+    }
+
+    /**
+     * Makes the moves of the layout, then removes the directories that they left empty
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves the files
+     * @param bool $dryRun Whether to only show the moves
+     * @param array<string> $sources The directories that the moves empty, relative to the root
+     * @return void
+     */
+    protected function _move(LayoutPlan $plan, Mover $mover, $dryRun, array $sources)
+    {
+        foreach ($plan->moves as [$from, $to]) {
+            $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
+            if (!$dryRun) {
+                $mover->move($from, $to);
+            }
+        }
+        if ($dryRun || $plan->moves === []) {
+            return;
+        }
+        foreach ($sources as $dir) {
+            $mover->removeEmpty($plan->root . DS . $dir);
+        }
+    }
+
+    /**
+     * Creates the missing entry files and directories of the layout of pieceofcake2/app, and removes the entry files
+     * of the CakePHP 2 layout that they replace
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves and removes the files
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    {
+        foreach ($entryFiles->directories as $dir) {
+            $this->out(__d('cake_console', 'Create the directory %s', $dir));
+            if (!$dryRun && !is_dir($root . DS . $dir)) {
+                mkdir($root . DS . $dir, 0777, true);
+            }
+        }
+        foreach ($entryFiles->files as $file => $contents) {
+            $this->out(__d('cake_console', 'Create %s of pieceofcake2/app', $file));
+            $path = $root . DS . str_replace('/', DS, $file);
+            if ($dryRun || file_exists($path)) {
+                continue;
+            }
+            if (!is_dir(dirname($path))) {
+                mkdir(dirname($path), 0777, true);
+            }
+            file_put_contents($path, $contents);
+            if ($file === 'bin/cake') {
+                chmod($path, 0755);
+            }
+        }
+        foreach ($entryFiles->kept as $constant => $file) {
+            $this->out(__d('cake_console', 'Keep the constant %s of %s in config/define.php', $constant, $file));
+        }
+        $this->_removeOldEntryFiles($root, $entryFiles, $mover, $dryRun);
+    }
+
+    /**
+     * Removes the entry files of the CakePHP 2 layout with git rm; outside Git, or with changes that are not
+     * committed, they stay and are listed
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Removes the files
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _removeOldEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    {
+        $left = [];
+        foreach ($entryFiles->oldFiles as $file) {
+            $path = $root . DS . str_replace('/', DS, $file);
+            if ($dryRun ? $mover->canRemove($path) : $mover->remove($path)) {
+                $this->out(__d('cake_console', 'Remove %s, which the files of pieceofcake2/app replace', $file));
+            } else {
+                $left[] = $file;
+            }
+        }
+        if ($left !== []) {
+            $this->out(__d('cake_console', '<warning>Delete %s, which the files of pieceofcake2/app replace, once you have compared them.</warning>', implode(', ', $left)));
+        }
+    }
+
+    /**
+     * Moves the classes of an application, or of the plugin given with `--plugin`, into a namespace: the namespace
+     * of `--namespace` (`App` by default, set in `App.namespace`) or the name of the plugin. Needs the layout of
+     * pieceofcake2/app (run `layout` first). Not part of all.
+     *
+     * @return int|null The exit code of Rector, or null on an error
+     */
+    public function namespace()
+    {
+        $plugin = $this->params['plugin'] ?? null;
+        $dryRun = !empty($this->params['dry-run']);
+        $target = $this->_namespaceTarget($plugin ? (string)$plugin : null);
+        if ($target === null) {
+            return null;
+        }
+        [$root, $namespace] = $target;
+
+        // A dry run makes the changes in a copy, and shows them as a diff
+        $work = $dryRun ? $this->_copyForDryRun($root, 'after') : $root;
+        $core = require dirname(__DIR__, 2) . DS . 'config' . DS . 'rector' . DS . 'classes' . DS . 'cakephp.php';
+        $plan = NamespacePlan::create($work, $namespace, (bool)$plugin, $core);
+        $mover = new Mover($work);
+        if (!$dryRun && $plan->moves !== [] && !$mover->usesGit()) {
+            $this->out(__d('cake_console', '<warning>Not a Git repository: the files are moved with rename(), so Git does not see them as moves.</warning>'));
+        }
+        foreach ($plan->moves as [$from, $to]) {
+            $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
+            $mover->move($from, $to);
+        }
+        foreach (['src' . DS . 'Lib', 'Lib'] as $dir) {
+            $mover->removeEmpty($work . DS . $dir);
+        }
+        $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
+        $configFiles = $this->_hashes($plan->configPaths());
+
+        $cwd = (string)getcwd();
+        chdir($work);
+        try {
+            $code = $this->_runNamespaceRules($plan, $plugin ? null : $namespace);
+        } finally {
+            chdir($cwd);
+        }
+        $this->_formatHeaders($plan, $configFiles);
+        if ($code !== 0) {
+            if ($before !== null) {
+                (new Folder(dirname($work, 2)))->delete();
+            }
+            $this->error(__d('cake_console', 'Rector failed (exit code %d). Fix the error, then run the command again.', $code));
+
+            return $code;
+        }
+        if (!$plugin) {
+            $this->_addAppNamespace($work, $namespace);
+        }
+        $this->_updateComposerJson($plan, $root, $work, $dryRun);
+        if ($before !== null) {
+            $this->out($this->_diff($before, $work));
+            (new Folder(dirname($work, 2)))->delete();
+        }
+        $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        if (!$dryRun) {
+            $this->out(__d('cake_console', 'Next, review the changes (git diff), run composer dump-autoload and the tests. The code needs pieceofcake2/cakephp 2.13 or later.'));
+        }
+
+        return $code;
+    }
+
+    /**
+     * The hashes of the PHP files of directories, to find the files that Rector changes
+     *
+     * @param array<string> $dirs The directories
+     * @return array<string, string> The hashes, by path
+     */
+    protected function _hashes(array $dirs)
+    {
+        $hashes = [];
+        foreach ($dirs as $dir) {
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if ($file->isFile() && $file->getExtension() === 'php') {
+                    $hashes[$file->getPathname()] = (string)md5_file($file->getPathname());
+                }
+            }
+        }
+
+        return $hashes;
+    }
+
+    /**
+     * Orders the docblock, namespace and use statements at the beginning of the namespaced files and of the other
+     * files that Rector changed, and separates the class_alias() of the core class overrides
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param array<string, string> $hashes The hashes of the other files before Rector, by path
+     * @return void
+     */
+    protected function _formatHeaders(NamespacePlan $plan, array $hashes)
+    {
+        $changed = array_keys(array_filter($hashes, static fn(string $hash, string $file): bool => md5_file($file) !== $hash, ARRAY_FILTER_USE_BOTH));
+        foreach (array_merge(array_keys($plan->files), $changed) as $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            $contents = HeaderFormatter::format((string)file_get_contents($file));
+            if (in_array($file, $plan->aliases, true)) {
+                $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
+            }
+            file_put_contents($file, $contents);
+        }
+    }
+
+    /**
+     * The directory and the namespace of `upgrade namespace`, or null after an error: a plugin uses its name, an
+     * application `--namespace` or App, and the directory must be in the layout of pieceofcake2/app
+     *
+     * @param string|null $plugin The plugin, or null for the application
+     * @return array{string, string}|null
+     */
+    protected function _namespaceTarget($plugin)
+    {
+        if ($plugin !== null && isset($this->params['namespace'])) {
+            $this->error(__d('cake_console', 'A plugin has the namespace of its name, as CakePHP looks its classes up as %s\\<Type>\\<Class>: leave out --namespace.', $plugin));
+
+            return null;
+        }
+        $namespace = $plugin ?? trim((string)($this->params['namespace'] ?? 'App'), '\\');
+        if (!preg_match('/^[A-Z][A-Za-z0-9_]*(\\\\[A-Z][A-Za-z0-9_]*)*$/', $namespace)) {
+            $this->error(__d('cake_console', 'Not a namespace: %s', $namespace));
+
+            return null;
+        }
+        $root = $plugin !== null ? $this->_pluginPath($plugin) : $this->_projectRoot();
+        if ($root === null) {
+            return null;
+        }
+        $legacy = NamespacePlan::legacyLayout($root, $plugin !== null);
+        if ($legacy !== null) {
+            $this->error(__d('cake_console', '%s is in the CakePHP 2 layout (%s): run bin/cake upgrade layout%s first.', $plugin ?? 'The application', $legacy, $plugin !== null ? ' --plugin ' . $plugin : ''));
+
+            return null;
+        }
+        if ($plugin === null && !is_file($root . DS . 'config' . DS . 'core.php')) {
+            $this->error(__d('cake_console', 'No config/core.php in %s: run the command from the root of the application.', $root));
+
+            return null;
+        }
+
+        return [$root, $namespace];
+    }
+
+    /**
+     * Runs the rules of `upgrade namespace` on the code (`src/`, `tests/`), then on `config/` and `templates/`, in
+     * which the classes of CakePHP keep their global names
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string|null $namespace App.namespace of an application, or null for a plugin
+     * @return int The exit code of Rector
+     */
+    protected function _runNamespaceRules(NamespacePlan $plan, $namespace)
+    {
+        $indexPaths = $plan->codePaths();
+        foreach (CakePlugin::loaded() as $loaded) {
+            $src = CakePlugin::path($loaded) . 'src';
+            if (is_dir($src) && !str_starts_with($src, $plan->root . DS)) {
+                $indexPaths[] = $src;
+            }
+        }
+        $appNamespace = $namespace ?? Configure::read('App.namespace');
+        $runs = [
+            [$plan->codePaths(), true, ['php']],
+            [$plan->configPaths(), false, ['php', 'ctp']],
+        ];
+        $code = 0;
+        foreach ($runs as [$paths, $renameCore, $extensions]) {
+            if ($paths === []) {
+                continue;
+            }
+            $file = (string)tempnam(TMP, 'upgrade-plan-');
+            file_put_contents($file, json_encode([
+                'files' => $renameCore ? $plan->files : [],
+                'aliases' => $renameCore ? $plan->aliases : [],
+                'classes' => $plan->classes,
+                'namespace' => is_string($appNamespace) && $appNamespace !== '' ? $appNamespace : null,
+                'shortNames' => empty($this->params['no-short-names']),
+                'indexPaths' => array_values(array_unique($indexPaths)),
+                'renameCore' => $renameCore,
+                'extensions' => $extensions,
+            ]));
+            $command = [
+                PHP_BINARY,
+                InstalledVersions::getInstallPath('rector/rector') . DS . 'bin' . DS . 'rector',
+                'process',
+                ...$paths,
+                '--config',
+                $this->_rectorConfig('namespace' . DS . 'namespace'),
+                '--clear-cache',
+                '--no-diffs',
+            ];
+            try {
+                $result = $this->_runRectorWithReport($command, ['UPGRADE_NAMESPACE_PLAN' => $file]);
+            } finally {
+                unlink($file);
+            }
+            if ($result !== 0) {
+                $code = $result;
+                break;
+            }
+        }
+
+        return $code;
+    }
+
+    /**
+     * Adds App.namespace to config/core.php
+     *
+     * @param string $root The root of the application (or its copy for a dry run)
+     * @param string $namespace The namespace
+     * @return void
+     */
+    protected function _addAppNamespace($root, $namespace)
+    {
+        $file = $root . DS . 'config' . DS . 'core.php';
+        [$result, $contents, $detail] = CoreConfig::addNamespace((string)file_get_contents($file), $namespace);
+        if ($result === CoreConfig::SAME) {
+            $this->out(__d('cake_console', 'config/core.php already sets App.namespace to %s.', $namespace));
+
+            return;
+        }
+        if ($result === CoreConfig::DIFFERENT) {
+            $this->out(__d('cake_console', '<warning>config/core.php sets App.namespace to %s, not %s: the classes are now in %s. Change one of them.</warning>', $detail, $namespace, $namespace));
+
+            return;
+        }
+        if ($result === CoreConfig::NO_PLACE) {
+            $this->out(__d('cake_console', '<warning>config/core.php has neither App.encoding nor Cache::config(): add Configure::write(\'App.namespace\', \'%s\'); to it by hand, before the caches are configured.</warning>', $namespace));
+
+            return;
+        }
+        $this->out(__d('cake_console', 'Add Configure::write(\'App.namespace\', \'%s\'); to config/core.php, before %s', $namespace, $detail));
+        file_put_contents($file, $contents);
+    }
+
+    /**
+     * Switches the autoloading of composer.json to PSR-4: the composer.json of the application, or of the plugin
+     * (else the one of the application, with the path of the plugin)
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string $root The directory of the application or plugin
+     * @param string $work The directory of the plan (a copy of the root for a dry run)
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _updateComposerJson(NamespacePlan $plan, $root, $work, $dryRun)
+    {
+        $target = $this->_composerFile($plan, $root, $work);
+        if ($target === null) {
+            return;
+        }
+        [$file, $prefix] = $target;
+        $composer = new ComposerJson((string)file_get_contents($file));
+        $name = $prefix === '' ? 'composer.json' : 'composer.json of the application';
+        $changes = $this->_switchToPsr4($composer, $plan, $prefix);
+        $paths = [];
+        foreach ($plan->paths as $from => $to) {
+            $paths[$prefix . $from] = $prefix . $to;
+        }
+        $this->_moveComposerPaths($composer, $paths, $name);
+        if ($changes === []) {
+            $this->out(__d('cake_console', '%s already autoloads %s with PSR-4.', $name, $plan->namespace));
+        } else {
+            $this->out(__d('cake_console', 'Update %s: %s', $name, implode('; ', $changes)));
+        }
+        // In a dry run, the composer.json of the copy is changed, not the one of the application
+        if ((!$dryRun || $prefix === '') && $composer->isChanged()) {
+            file_put_contents($file, $composer->contents());
+        }
+    }
+
+    /**
+     * The composer.json to change: of the application or plugin, or of the application for a plugin without one
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string $root The directory of the application or plugin
+     * @param string $work The directory of the plan (a copy of the root for a dry run)
+     * @return array{string, string}|null The file, and the path of the plugin in the application ('' or 'plugins/Blog/')
+     */
+    protected function _composerFile(NamespacePlan $plan, $root, $work)
+    {
+        $file = $work . DS . 'composer.json';
+        $prefix = '';
+        if ($plan->plugin && !is_file($file)) {
+            $project = (string)$this->_projectRoot(false);
+            if (!str_starts_with($root, $project . DS)) {
+                $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from src/ and %s\\Test\\ from tests/ of the plugin with PSR-4.</warning>', $plan->namespace, $plan->namespace));
+
+                return null;
+            }
+            $file = $project . DS . 'composer.json';
+            $prefix = str_replace(DS, '/', substr($root, strlen($project) + 1)) . '/';
+        }
+        if (!is_file($file)) {
+            $this->out(__d('cake_console', '<warning>No composer.json: autoload %s\\ from %ssrc/ and %s\\Test\\ from %stests/ with PSR-4.</warning>', $plan->namespace, $prefix, $plan->namespace, $prefix));
+
+            return null;
+        }
+
+        return [$file, $prefix];
+    }
+
+    /**
+     * PSR-4 instead of the classmap of the code, also of the moved directories (Controller/ of a plugin), and the
+     * classmap of the core class overrides
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\ComposerJson $composer composer.json
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param string $prefix The path of the plugin in the application, or ''
+     * @return array<string> The changes
+     */
+    protected function _switchToPsr4(ComposerJson $composer, NamespacePlan $plan, $prefix)
+    {
+        $changes = [];
+        foreach (['autoload', 'autoload-dev'] as $section) {
+            foreach (array_merge(['src/', 'tests/'], array_keys($plan->paths)) as $dir) {
+                foreach ($composer->removeClassmap($section, $prefix . $dir, [$prefix . 'src/Cake/']) as $removed) {
+                    $changes[] = sprintf('%s.classmap: removed %s', $section, $removed);
+                }
+            }
+        }
+        foreach ([['autoload', 'src/', ''], ['autoload-dev', 'tests/', 'Test\\']] as [$section, $dir, $suffix]) {
+            if ($composer->addPsr4($section, $plan->namespace . '\\' . $suffix, $prefix . $dir)) {
+                $changes[] = sprintf('%s.psr-4: %s\\%s => %s%s', $section, $plan->namespace, $suffix, $prefix, $dir);
+            }
+        }
+        if ($plan->overridden !== [] && $composer->addToList('autoload', 'classmap', 'src/Cake/')) {
+            $changes[] = 'autoload.classmap: src/Cake/';
+        }
+        $vendor = rtrim((string)($composer->config('vendor-dir') ?: 'vendor'), '/');
+        foreach ($plan->overridden as $overridden) {
+            $excluded = $vendor . '/pieceofcake2/cakephp/src/' . $overridden;
+            if ($composer->addToList('autoload', 'exclude-from-classmap', $excluded)) {
+                $changes[] = 'autoload.exclude-from-classmap: ' . $excluded;
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Updates the paths of composer.json that are in moved directories, and prints the changes
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\ComposerJson $composer composer.json
+     * @param array<string, string> $paths The new paths, by old path
+     * @param string $name The name of the file in the messages
+     * @return void
+     */
+    protected function _moveComposerPaths(ComposerJson $composer, array $paths, $name)
+    {
+        [$changes, $unknown] = $composer->movePaths($paths);
+        if ($changes !== []) {
+            $this->out(__d('cake_console', 'Update %s: %s', $name, implode('; ', $changes)));
+        }
+        if ($unknown !== []) {
+            $this->out(__d('cake_console', '<warning>Update these paths of %s by hand, as their files moved to different places: %s</warning>', $name, implode('; ', $unknown)));
+        }
+    }
+
+    /**
+     * A copy of the files that `upgrade namespace` changes, for a dry run
+     *
+     * @param string $root The directory of the application or plugin
+     * @param string $name The name of the copy
+     * @return string The directory of the copy
+     */
+    protected function _copyForDryRun($root, $name)
+    {
+        $copy = TMP . 'upgrade-dry-run-' . getmypid() . DS . $name . DS . basename($root);
+        $skip = ['vendor', 'node_modules', '.git', 'tmp', 'logs', 'webroot', 'plugins'];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveCallbackFilterIterator(
+                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                static fn(SplFileInfo $file, $key, RecursiveDirectoryIterator $iterator): bool => !($iterator->getSubPath() === '' && $file->isDir() && in_array($file->getFilename(), $skip, true)),
+            ),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+        mkdir($copy, 0777, true);
+        foreach ($iterator as $file) {
+            $target = $copy . DS . substr($file->getPathname(), strlen($root) + 1);
+            if ($file->isDir()) {
+                mkdir($target, 0777, true);
+            } else {
+                copy($file->getPathname(), $target);
+            }
+        }
+
+        return realpath($copy) ?: $copy;
+    }
+
+    /**
+     * The changes between two directories, as a diff
+     *
+     * @param string $before The directory before the changes
+     * @param string $after The directory after the changes
+     * @return string
+     */
+    protected function _diff($before, $after)
+    {
+        $output = [];
+        $command = sprintf('git diff --no-index --no-color --no-prefix -- %s %s 2>&1', escapeshellarg($before), escapeshellarg($after));
+        exec($command, $output, $code);
+        if ($code > 1) {
+            $output = [];
+            exec(sprintf('diff -ruN %s %s 2>&1', escapeshellarg($before), escapeshellarg($after)), $output);
+        }
+
+        return str_replace([$before . DS, $after . DS, ltrim($before, DS) . DS, ltrim($after, DS) . DS], '', implode("\n", $output));
+    }
+
+    /**
+     * The root of the project: the current directory
+     *
+     * @param bool $check Whether to print an error if it holds no application
+     * @return string|null
+     */
+    protected function _projectRoot($check = true)
+    {
+        $root = (string)realpath((string)getcwd());
+        if ($check && !Paths::hasDirectory($root, 'app') && !Paths::hasDirectory($root, 'config')) {
+            $this->error(__d('cake_console', 'Neither app/ nor config/ in %s: run the command from the root of the project.', $root));
+
+            return null;
+        }
+
+        return $root;
+    }
+
+    /**
+     * The directory of a plugin, loaded or in a directory of plugins
+     *
+     * @param string $plugin The name of the plugin
+     * @return string|null
+     */
+    protected function _pluginPath($plugin)
+    {
+        if (CakePlugin::loaded($plugin)) {
+            return rtrim((string)realpath(CakePlugin::path($plugin)), DS);
+        }
+        foreach (App::path('plugins') as $path) {
+            if (is_dir($path . $plugin)) {
+                return rtrim((string)realpath($path . $plugin), DS);
+            }
+        }
+        $this->error(__d('cake_console', 'The plugin %s was not found.', $plugin));
+
+        return null;
+    }
+
+    /**
+     * Prints what the user has to check or do by hand
+     *
+     * @param array<string> $notices The notices
+     * @return void
+     */
+    protected function _notices(array $notices)
+    {
+        foreach ($notices as $notice) {
+            $this->out(__d('cake_console', '<warning>%s</warning>', $notice));
+        }
     }
 
     /**
@@ -1011,6 +1662,48 @@ class UpgradeShell extends AppShell
                     'dry-run' => [
                         'short' => 'd',
                         'help' => __d('cake_console', 'Show the changes without writing them.'),
+                        'boolean' => true,
+                    ],
+                    'no-short-names' => [
+                        'help' => __d('cake_console', 'class-name-strings: keep the short names (\'Auth\', \'DebugKit.Toolbar\'), which CakePHP looks up when the application runs; only replace the full class names.'),
+                        'boolean' => true,
+                    ],
+                ],
+            ],
+            ])->addSubcommand('layout', [
+            'help' => __d('cake_console', 'Move an application from the CakePHP 2 layout (app/Config, app/Controller, app/View, ...) to the layout of pieceofcake2/app (config/, src/, templates/, ...), or the configuration, templates, translations and tests of a plugin. Not part of all.'),
+            'parser' => [
+                'options' => [
+                    'plugin' => [
+                        'short' => 'p',
+                        'help' => __d('cake_console', 'The plugin to move, instead of the application.'),
+                    ],
+                    'dry-run' => [
+                        'short' => 'd',
+                        'help' => __d('cake_console', 'Show the moves without making them.'),
+                        'boolean' => true,
+                    ],
+                ],
+            ],
+            ])->addSubcommand('namespace', [
+            'help' => __d('cake_console', 'Move the classes of an application or plugin in the layout of pieceofcake2/app into a namespace: App.namespace, PSR-4 and the code. Run layout first. Not part of all.'),
+            'parser' => [
+                'options' => [
+                    'plugin' => [
+                        'short' => 'p',
+                        'help' => __d('cake_console', 'The plugin to change, instead of the application. Its namespace is its name.'),
+                    ],
+                    'namespace' => [
+                        'short' => 'n',
+                        'help' => __d('cake_console', 'The namespace of the application (default: App).'),
+                    ],
+                    'no-short-names' => [
+                        'help' => __d('cake_console', 'Keep the short names in the settings (\'Auth\', \'DebugKit.Toolbar\'), which CakePHP looks up when the application runs; only replace the full class names.'),
+                        'boolean' => true,
+                    ],
+                    'dry-run' => [
+                        'short' => 'd',
+                        'help' => __d('cake_console', 'Show the moves and the changes without making them.'),
                         'boolean' => true,
                     ],
                 ],

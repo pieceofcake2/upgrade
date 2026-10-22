@@ -1,0 +1,16 @@
+{
+    "name": "acme/cakephp-blog",
+    "type": "cakephp-plugin",
+    "require": {
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "classmap": ["Controller/", "Model/", "View/Helper/", "Lib/"]
+    },
+    "autoload-dev": {
+        "classmap": ["tests/"]
+    },
+    "extra": {
+        "installer-name": "Blog"
+    }
+}

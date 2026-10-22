@@ -1,0 +1,2 @@
+msgid "Archives"
+msgstr "Archives"

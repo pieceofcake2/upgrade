@@ -1,0 +1,28 @@
+{
+    "name": "acme/blog",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        },
+        "classmap": ["src/Cake/"],
+        "exclude-from-classmap": ["vendor/pieceofcake2/cakephp/src/Routing/Dispatcher.php"]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Test\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "installer-paths": {
+            "plugins/{$name}/": ["type:cakephp-plugin"]
+        }
+    }
+}

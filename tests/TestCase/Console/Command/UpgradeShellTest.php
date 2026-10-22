@@ -174,7 +174,7 @@ class UpgradeShellTest extends CakeTestCase
 
         $this->assertSame([
             'all', 'tests', 'locations', 'i18n', 'helpers', 'basics', 'request',
-            'configure', 'constants', 'controller_redirects', 'components', 'exceptions', 'rector',
+            'configure', 'constants', 'controller_redirects', 'components', 'exceptions', 'rector', 'layout', 'namespace',
         ], $commands);
 
         $this->_write('README', '');
@@ -502,6 +502,8 @@ PHP, $this->_read('Lib/Legacy.php'));
             $this->assertStringContainsString('Running ' . $command, $this->out->output);
         }
         $this->assertStringNotContainsString('Running rector', $this->out->output);
+        $this->assertStringNotContainsString('Running layout', $this->out->output);
+        $this->assertStringNotContainsString('Running namespace', $this->out->output);
     }
 
     /**
@@ -543,13 +545,81 @@ PHP, $this->_read('Lib/Legacy.php'));
         }
 
         ob_start();
-        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'namespaced-classes', $dir . 'PostsController.php']);
+        $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'namespaced-classes', $dir . 'PostsController.php', $dir . 'Conflicts.php']);
         $output = (string)ob_get_clean();
 
         $this->assertSame(0, $code, $output);
         foreach (glob($fixtures . 'namespaced-classes-expected' . DS . '*.php') ?: [] as $expected) {
             $this->assertFileEquals($expected, $dir . basename($expected));
         }
+        // The comparisons that stay comparisons, as the classes have subclasses
+        $this->assertStringContainsString('Review these places:', $this->out->output);
+        foreach ([11 => 'CakeResponse', 17 => 'Model', 20 => 'SessionComponent', 24 => 'SessionComponent', 41 => 'BadRequestException'] as $line => $class) {
+            $this->assertStringContainsString(
+                sprintf('PostsController.php:%d: kept the comparison with %s::class, as %s has subclasses', $line, $class, $class),
+                $this->out->output,
+            );
+        }
+        $this->assertStringNotContainsString('kept the comparison with CakeRequest::class', $this->out->output);
+    }
+
+    /**
+     * The rules of class-name-strings, run by Rector on a copy of the fixtures, with the short names and without
+     *
+     * @return void
+     */
+    public function testRectorClassNameStrings(): void
+    {
+        $fixtures = dirname(__DIR__, 3) . DS . 'fixtures' . DS . 'rector' . DS;
+        Configure::write('App.namespace', 'App');
+        try {
+            foreach (['class-name-strings-expected' => [], 'class-name-strings-no-short-names-expected' => ['--no-short-names']] as $expected => $options) {
+                $dir = $this->_root . $expected . DS;
+                mkdir($dir, 0777, true);
+                foreach (glob($fixtures . 'class-name-strings' . DS . '*.php') ?: [] as $file) {
+                    copy($file, $dir . basename($file));
+                }
+
+                ob_start();
+                $code = $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', ...$options, $dir]);
+                $output = (string)ob_get_clean();
+
+                $this->assertSame(0, $code, $output);
+                foreach (glob($fixtures . $expected . DS . '*.php') ?: [] as $file) {
+                    $this->assertFileEquals($file, $dir . basename($file), $expected . '/' . basename($file));
+                }
+            }
+        } finally {
+            Configure::delete('App.namespace');
+        }
+    }
+
+    /**
+     * The rector command passes App.namespace and --no-short-names to the rules in environment variables
+     *
+     * @return void
+     */
+    public function testRectorEnvironment(): void
+    {
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', '_runRector'], [$this->out, $this->out, $this->getMock('ConsoleInput', [], [], '', false)]);
+        $env = [];
+        $this->Shell->expects($this->exactly(2))->method('_runRector')->willReturnCallback(function () use (&$env): int {
+            $env[] = [getenv('UPGRADE_SHORT_NAMES'), getenv('UPGRADE_APP_NAMESPACE'), is_file((string)getenv('UPGRADE_RECTOR_REPORT'))];
+
+            return 0;
+        });
+
+        Configure::write('App.namespace', 'Acme');
+        try {
+            $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', 'src']);
+            $this->Shell->runCommand('rector', ['rector', '--rules', 'class-name-strings', '--no-short-names', 'src']);
+        } finally {
+            Configure::delete('App.namespace');
+        }
+
+        $this->assertSame([['1', 'Acme', true], ['0', 'Acme', true]], $env);
+        $this->assertFalse(getenv('UPGRADE_SHORT_NAMES'));
+        $this->assertFalse(getenv('UPGRADE_RECTOR_REPORT'));
     }
 
     /**
@@ -597,7 +667,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         $this->Shell->params['rules'] = 'variadic-arguments';
         $this->Shell->rector();
 
-        $this->assertSame('Unknown rules: nothing. Available: namespaced-classes, variadic-arguments', $errors[0]);
+        $this->assertSame('Unknown rules: nothing. Available: class-name-strings, namespaced-classes, variadic-arguments', $errors[0]);
         $this->assertSame('Give the paths to process, e.g. src tests.', $errors[1]);
     }
 }

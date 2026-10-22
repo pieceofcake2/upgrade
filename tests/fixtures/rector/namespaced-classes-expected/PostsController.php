@@ -1,13 +1,17 @@
 <?php
+use Cake\Controller\Controller;
+use Cake\Network\CakeResponse;
 use Cake\Core\App;
 use Cake\Network\CakeRequest;
-use Cake\Network\CakeResponse;
 use Cake\Model\Model;
 use Cake\Controller\Component\SessionComponent;
+use Cake\Controller\Component\AuthComponent;
 use Cake\Error\NotFoundException;
+use Cake\Error\BadRequestException;
+use Cake\Error\MethodNotAllowedException;
+use Cake\Event\CakeEventManager;
 use Cake\Error\ForbiddenException;
 use Cake\Error\UnauthorizedException;
-use Cake\Controller\Controller;
 use Cake\Controller\Component;
 use Cake\Network\Email\CakeEmail;
 use Cake\Core\Configure;
@@ -21,7 +25,7 @@ class PostsController extends AppController
 {
     public function beforeFilter()
     {
-        if (get_class($this->request) === CakeRequest::class) {
+        if ($this->request instanceof CakeRequest) {
             $this->set('plain', true);
         }
         if (CakeResponse::class !== get_class($this->response)) {
@@ -34,6 +38,12 @@ class PostsController extends AppController
             $this->set('model', true);
         }
         $this->set('session', in_array(get_class($this->Session), [SessionComponent::class, 'MySessionComponent'], true));
+        if (!$this->Auth instanceof AuthComponent) {
+            $this->set('auth', false);
+        }
+        if (get_class($this->Session) == SessionComponent::class) {
+            $this->set('session', true);
+        }
     }
 
     public function view($id)
@@ -46,6 +56,13 @@ class PostsController extends AppController
                     return $this->redirect('/');
                 case 'MyException':
                     return null;
+            }
+
+            if (in_array(get_class($e), [BadRequestException::class, MethodNotAllowedException::class])) {
+                return $this->redirect('/');
+            }
+            if (in_array(get_class($this->getEventManager()), [CakeEventManager::class])) {
+                return null;
             }
 
             return match (get_class($e)) {
@@ -65,11 +82,15 @@ class PostsController extends AppController
     }
 }
 
+class MySessionComponent extends SessionComponent
+{
+}
+
 class GreetingComponent extends Component
 {
     /**
-     * @param \Cake\Controller\Controller $controller Controller
-     * @return \Cake\Network\CakeResponse|null
+     * @param Controller $controller Controller
+     * @return CakeResponse|null
      */
     public function startup(Controller $controller)
     {

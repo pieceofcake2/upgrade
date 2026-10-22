@@ -2,10 +2,14 @@
 # Reference: https://qlty.sh/d/qlty-toml
 config_version = "0"
 
-# Paths that are not analyzed (dependencies and local files)
+# Paths that are not analyzed (dependencies, local files and sample code)
 exclude_patterns = [
     "vendor/**",
     "node_modules/**",
+    # The applications, plugins and Rector rules of the tests: sample code before and after the upgrade
+    "tests/fixtures/**",
+    # Copies of the entry files of pieceofcake2/app, which layout creates
+    "resources/skeleton/**",
 ]
 
 test_patterns = [

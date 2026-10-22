@@ -7,6 +7,7 @@
     "require": {
         "php": ">=8.0",
         "composer/installers": "^1.0 || ^2.0",
+        "nikic/php-parser": "^5.0",
         "pieceofcake2/cakephp": "^2.12",
         "rector/rector": "^2.7"
     },
