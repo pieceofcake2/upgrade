@@ -174,7 +174,7 @@ class UpgradeShellTest extends CakeTestCase
 
         $this->assertSame([
             'all', 'tests', 'locations', 'i18n', 'helpers', 'basics', 'request',
-            'configure', 'constants', 'controller_redirects', 'components', 'exceptions', 'rector', 'layout',
+            'configure', 'constants', 'controller_redirects', 'components', 'exceptions', 'rector', 'layout', 'namespace',
         ], $commands);
 
         $this->_write('README', '');
@@ -503,6 +503,7 @@ PHP, $this->_read('Lib/Legacy.php'));
         }
         $this->assertStringNotContainsString('Running rector', $this->out->output);
         $this->assertStringNotContainsString('Running layout', $this->out->output);
+        $this->assertStringNotContainsString('Running namespace', $this->out->output);
     }
 
     /**

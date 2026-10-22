@@ -1,0 +1,20 @@
+{
+    "name": "acme/cakephp-blog",
+    "type": "cakephp-plugin",
+    "require": {
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "psr-4": {
+            "Blog\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Blog\\Test\\": "tests/"
+        }
+    },
+    "extra": {
+        "installer-name": "Blog"
+    }
+}

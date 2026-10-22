@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec php -q "$(dirname "$0")"/cake.php "$@"

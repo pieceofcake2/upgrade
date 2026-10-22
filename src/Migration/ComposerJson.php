@@ -6,10 +6,10 @@ namespace PieceOfCake2\Upgrade\Migration;
 use InvalidArgumentException;
 
 /**
- * Changes the paths of a `composer.json`, and keeps the rest of the file as it is written.
+ * Switches the autoloading of a `composer.json` to PSR-4, and keeps the rest of the file as it is written.
  *
- * Only the changed sections (`autoload`, `autoload-dev`, `extra`) are written again, with the indentation of the
- * file; the other entries of these sections are kept.
+ * Only the `autoload` and `autoload-dev` sections are written again, with the indentation of the file; the other
+ * entries of these sections are kept.
  */
 final class ComposerJson
 {
@@ -37,6 +37,83 @@ final class ComposerJson
             throw new InvalidArgumentException('composer.json is no valid JSON: ' . json_last_error_msg());
         }
         $this->data = $data;
+    }
+
+    /**
+     * Adds a PSR-4 namespace, unless the namespace is already there
+     *
+     * @param string $section `autoload` or `autoload-dev`
+     * @param string $namespace The namespace, e.g. `App\`
+     * @param string $path The directory, e.g. `src/`
+     * @return bool Whether it was added
+     */
+    public function addPsr4(string $section, string $namespace, string $path): bool
+    {
+        if (isset($this->data[$section]['psr-4'][$namespace])) {
+            return false;
+        }
+        $this->data[$section]['psr-4'][$namespace] = $path;
+        $this->changed[$section] = true;
+
+        return true;
+    }
+
+    /**
+     * Removes the classmap entries of a directory and of its subdirectories, e.g. `src/` and `src/Model/`
+     *
+     * @param string $section `autoload` or `autoload-dev`
+     * @param string $path The directory, e.g. `src/`
+     * @param array<string> $keep Entries to keep, e.g. `src/Cake/`
+     * @return array<string> The removed entries
+     */
+    public function removeClassmap(string $section, string $path, array $keep = []): array
+    {
+        $entries = $this->data[$section]['classmap'] ?? null;
+        if (!is_array($entries)) {
+            return [];
+        }
+        $prefix = self::normalize($path);
+        $keep = array_map([self::class, 'normalize'], $keep);
+        $removed = [];
+        foreach ($entries as $index => $entry) {
+            $normalized = self::normalize((string)$entry);
+            if (($normalized === $prefix || str_starts_with($normalized, $prefix . '/')) && !in_array($normalized, $keep, true)) {
+                $removed[] = (string)$entry;
+                unset($entries[$index]);
+            }
+        }
+        if ($removed === []) {
+            return [];
+        }
+        if ($entries === []) {
+            unset($this->data[$section]['classmap']);
+        } else {
+            $this->data[$section]['classmap'] = array_values($entries);
+        }
+        $this->changed[$section] = true;
+
+        return $removed;
+    }
+
+    /**
+     * Adds an entry to a list of a section (`classmap`, `exclude-from-classmap`), unless it is there
+     *
+     * @param string $section `autoload` or `autoload-dev`
+     * @param string $key The list
+     * @param string $entry The entry
+     * @return bool Whether it was added
+     */
+    public function addToList(string $section, string $key, string $entry): bool
+    {
+        $list = $this->data[$section][$key] ?? [];
+        if (!is_array($list) || in_array(self::normalize($entry), array_map(fn($item): string => self::normalize((string)$item), $list), true)) {
+            return false;
+        }
+        $list[] = $entry;
+        $this->data[$section][$key] = $list;
+        $this->changed[$section] = true;
+
+        return true;
     }
 
     /**
@@ -107,6 +184,17 @@ final class ComposerJson
         }
 
         return [$changes, $unknown];
+    }
+
+    /**
+     * The value of a setting of `config`
+     *
+     * @param string $key The setting
+     * @return mixed
+     */
+    public function config(string $key): mixed
+    {
+        return $this->data['config'][$key] ?? null;
     }
 
     /**
