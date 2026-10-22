@@ -550,6 +550,15 @@ PHP, $this->_read('Lib/Legacy.php'));
         foreach (glob($fixtures . 'namespaced-classes-expected' . DS . '*.php') ?: [] as $expected) {
             $this->assertFileEquals($expected, $dir . basename($expected));
         }
+        // The comparisons that stay comparisons, as the classes have subclasses
+        $this->assertStringContainsString('Review these places:', $this->out->output);
+        foreach ([11 => 'CakeResponse', 17 => 'Model', 20 => 'SessionComponent', 24 => 'SessionComponent', 41 => 'BadRequestException'] as $line => $class) {
+            $this->assertStringContainsString(
+                sprintf('PostsController.php:%d: kept the comparison with %s::class, as %s has subclasses', $line, $class, $class),
+                $this->out->output,
+            );
+        }
+        $this->assertStringNotContainsString('kept the comparison with CakeRequest::class', $this->out->output);
     }
 
     /**

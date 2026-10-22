@@ -18,6 +18,12 @@ class PostsController extends AppController
             $this->set('model', true);
         }
         $this->set('session', in_array(get_class($this->Session), ['SessionComponent', 'MySessionComponent'], true));
+        if (get_class($this->Auth) !== 'AuthComponent') {
+            $this->set('auth', false);
+        }
+        if (get_class($this->Session) == 'SessionComponent') {
+            $this->set('session', true);
+        }
     }
 
     public function view($id)
@@ -30,6 +36,13 @@ class PostsController extends AppController
                     return $this->redirect('/');
                 case 'MyException':
                     return null;
+            }
+
+            if (in_array(get_class($e), ['BadRequestException', 'MethodNotAllowedException'])) {
+                return $this->redirect('/');
+            }
+            if (in_array(get_class($this->getEventManager()), ['CakeEventManager'])) {
+                return null;
             }
 
             return match (get_class($e)) {
@@ -47,6 +60,10 @@ class PostsController extends AppController
 
         return static::class === 'Controller';
     }
+}
+
+class MySessionComponent extends SessionComponent
+{
 }
 
 class GreetingComponent extends Component

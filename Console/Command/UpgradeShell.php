@@ -17,6 +17,7 @@
  */
 
 use Composer\InstalledVersions;
+use PieceOfCake2\Upgrade\Rector\Report;
 
 App::uses('AppShell', 'Console/Command');
 App::uses('Folder', 'Utility');
@@ -130,7 +131,44 @@ class UpgradeShell extends AppShell
             $command[] = '--dry-run';
         }
 
-        return $this->_runRector($command);
+        return $this->_runRectorWithReport($command, []);
+    }
+
+    /**
+     * Runs Rector with environment variables for the configuration of the rules, then prints the places that the
+     * rules list for a review
+     *
+     * @param array<string> $command Command and its arguments
+     * @param array<string, string> $env Environment variables
+     * @return int Exit code
+     */
+    protected function _runRectorWithReport(array $command, array $env)
+    {
+        $report = (string)tempnam(TMP, 'upgrade-report-');
+        $env[Report::ENV] = $report;
+        foreach ($env as $name => $value) {
+            putenv($name . '=' . $value);
+        }
+        try {
+            $code = $this->_runRector($command);
+        } finally {
+            foreach (array_keys($env) as $name) {
+                putenv($name);
+            }
+        }
+        $lines = is_file($report) ? array_unique(array_filter(explode("\n", (string)file_get_contents($report)))) : [];
+        if (is_file($report)) {
+            unlink($report);
+        }
+        if ($lines !== []) {
+            sort($lines);
+            $this->out(__d('cake_console', '<warning>Review these places:</warning>'));
+            foreach ($lines as $line) {
+                $this->out('  ' . $line);
+            }
+        }
+
+        return $code;
     }
 
     /**
