@@ -11,8 +11,9 @@
     <file>config</file>
     <file>src</file>
     <file>tests</file>
-    <!-- The input and the expected output of the Rector rules, written as applications write them -->
-    <exclude-pattern>tests/fixtures/rector/*</exclude-pattern>
+    <!-- The applications and plugins of the tests, and the input and expected output of the Rector rules, written as
+         applications write them -->
+    <exclude-pattern>tests/fixtures/*</exclude-pattern>
 
     <rule ref="CakePHP2"/>
 </ruleset>

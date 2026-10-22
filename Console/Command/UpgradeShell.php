@@ -17,6 +17,10 @@
  */
 
 use Composer\InstalledVersions;
+use PieceOfCake2\Upgrade\Migration\ComposerJson;
+use PieceOfCake2\Upgrade\Migration\LayoutPlan;
+use PieceOfCake2\Upgrade\Migration\Mover;
+use PieceOfCake2\Upgrade\Migration\Paths;
 use PieceOfCake2\Upgrade\Rector\Report;
 
 App::uses('AppShell', 'Console/Command');
@@ -90,8 +94,8 @@ class UpgradeShell extends AppShell
     {
         foreach ($this->OptionParser->subcommands() as $command) {
             $name = $command->name();
-            // rector is not a step of the upgrade from CakePHP 1.3
-            if ($name === 'all' || $name === 'rector') {
+            // rector and layout are not steps of the upgrade from CakePHP 1.3
+            if (in_array($name, ['all', 'rector', 'layout'], true)) {
                 continue;
             }
             $this->out(__d('cake_console', 'Running %s', $name));
@@ -210,6 +214,125 @@ class UpgradeShell extends AppShell
         passthru(implode(' ', array_map('escapeshellarg', $command)), $code);
 
         return $code;
+    }
+
+    /**
+     * Moves an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, `app/View/`, ...) to the
+     * layout of pieceofcake2/app (`config/`, `src/`, `templates/`, `resources/locales/`, `tests/`, `webroot/`), or the
+     * configuration, templates, translations and tests of the plugin given with `--plugin`. Run from the root of
+     * the project. Not part of all.
+     *
+     * @return void
+     */
+    public function layout()
+    {
+        $plugin = $this->params['plugin'] ?? null;
+        $root = $plugin ? $this->_pluginPath((string)$plugin) : $this->_projectRoot();
+        if ($root === null) {
+            return;
+        }
+        $plan = $plugin ? LayoutPlan::forPlugin($root) : LayoutPlan::forApplication($root);
+        $dryRun = !empty($this->params['dry-run']);
+        $mover = new Mover($root);
+        if ($plan->moves === []) {
+            $this->out(__d('cake_console', 'Nothing to move: %s is in the layout of pieceofcake2/app.', $plugin ?: $root));
+        } elseif (!$dryRun && !$mover->usesGit()) {
+            $this->out(__d('cake_console', '<warning>Not a Git repository: the files are moved with rename(), so Git does not see them as moves.</warning>'));
+        }
+        foreach ($plan->moves as [$from, $to]) {
+            $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
+            if (!$dryRun) {
+                $mover->move($from, $to);
+            }
+        }
+        if (!$dryRun && $plan->moves !== []) {
+            $dirs = $plugin ? ['View', 'Locale', 'Test', 'templates'] : ['app', 'templates'];
+            foreach ($dirs as $dir) {
+                $mover->removeEmpty($root . DS . $dir);
+            }
+        }
+        $composer = $root . DS . 'composer.json';
+        if (is_file($composer) && $plan->paths !== []) {
+            $json = new ComposerJson((string)file_get_contents($composer));
+            $this->_moveComposerPaths($json, $plan->paths, 'composer.json');
+            if (!$dryRun && $json->isChanged()) {
+                file_put_contents($composer, $json->contents());
+            }
+        }
+        $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        if ($plan->moves !== [] && !$dryRun) {
+            $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace%s` moves the classes into a namespace.', $plugin ? ' --plugin ' . $plugin : ''));
+        }
+    }
+
+    /**
+     * Updates the paths of composer.json that are in moved directories, and prints the changes
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\ComposerJson $composer composer.json
+     * @param array<string, string> $paths The new paths, by old path
+     * @param string $name The name of the file in the messages
+     * @return void
+     */
+    protected function _moveComposerPaths(ComposerJson $composer, array $paths, $name)
+    {
+        [$changes, $unknown] = $composer->movePaths($paths);
+        if ($changes !== []) {
+            $this->out(__d('cake_console', 'Update %s: %s', $name, implode('; ', $changes)));
+        }
+        if ($unknown !== []) {
+            $this->out(__d('cake_console', '<warning>Update these paths of %s by hand, as their files moved to different places: %s</warning>', $name, implode('; ', $unknown)));
+        }
+    }
+
+    /**
+     * The root of the project: the current directory
+     *
+     * @return string|null
+     */
+    protected function _projectRoot()
+    {
+        $root = (string)realpath((string)getcwd());
+        if (!Paths::hasDirectory($root, 'app') && !Paths::hasDirectory($root, 'config')) {
+            $this->error(__d('cake_console', 'Neither app/ nor config/ in %s: run the command from the root of the project.', $root));
+
+            return null;
+        }
+
+        return $root;
+    }
+
+    /**
+     * The directory of a plugin, loaded or in a directory of plugins
+     *
+     * @param string $plugin The name of the plugin
+     * @return string|null
+     */
+    protected function _pluginPath($plugin)
+    {
+        if (CakePlugin::loaded($plugin)) {
+            return rtrim((string)realpath(CakePlugin::path($plugin)), DS);
+        }
+        foreach (App::path('plugins') as $path) {
+            if (is_dir($path . $plugin)) {
+                return rtrim((string)realpath($path . $plugin), DS);
+            }
+        }
+        $this->error(__d('cake_console', 'The plugin %s was not found.', $plugin));
+
+        return null;
+    }
+
+    /**
+     * Prints what the user has to check or do by hand
+     *
+     * @param array<string> $notices The notices
+     * @return void
+     */
+    protected function _notices(array $notices)
+    {
+        foreach ($notices as $notice) {
+            $this->out(__d('cake_console', '<warning>%s</warning>', $notice));
+        }
     }
 
     /**
@@ -1057,6 +1180,21 @@ class UpgradeShell extends AppShell
                     ],
                     'no-short-names' => [
                         'help' => __d('cake_console', 'class-name-strings: keep the short names (\'Auth\', \'DebugKit.Toolbar\'), which CakePHP looks up when the application runs; only replace the full class names.'),
+                        'boolean' => true,
+                    ],
+                ],
+            ],
+            ])->addSubcommand('layout', [
+            'help' => __d('cake_console', 'Move an application from the CakePHP 2 layout (app/Config, app/Controller, app/View, ...) to the layout of pieceofcake2/app (config/, src/, templates/, ...), or the configuration, templates, translations and tests of a plugin. Not part of all.'),
+            'parser' => [
+                'options' => [
+                    'plugin' => [
+                        'short' => 'p',
+                        'help' => __d('cake_console', 'The plugin to move, instead of the application.'),
+                    ],
+                    'dry-run' => [
+                        'short' => 'd',
+                        'help' => __d('cake_console', 'Show the moves without making them.'),
                         'boolean' => true,
                     ],
                 ],

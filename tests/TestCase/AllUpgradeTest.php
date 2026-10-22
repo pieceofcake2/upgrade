@@ -38,6 +38,7 @@ class AllUpgradeTest extends TestSuite
         $suite = new CakeTestSuite('All Upgrade plugin tests');
 
         $suite->addTestFile(__DIR__ . DS . 'AllConsoleTest.php');
+        $suite->addTestFile(__DIR__ . DS . 'AllMigrationTest.php');
 
         return $suite;
     }
