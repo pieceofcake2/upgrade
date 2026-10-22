@@ -19,6 +19,6 @@ use Rector\Renaming\Rector\Name\RenameClassRector;
 $classes = require __DIR__ . '/classes/cakephp.php';
 
 return RectorConfig::configure()
-    ->withImportNames(importShortClasses: false, removeUnusedImports: false)
+    ->withImportNames(importDocBlockNames: false, importShortClasses: false, removeUnusedImports: false)
     ->withConfiguredRule(RenameClassRector::class, $classes)
     ->withConfiguredRule(NamespacedClassNameRector::class, $classes);
