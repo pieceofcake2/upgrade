@@ -386,6 +386,10 @@ class UpgradeShell extends AppShell
         }
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
         $configFiles = $this->_hashes($plan->configPaths());
+        $configUses = [];
+        foreach (array_keys($configFiles) as $file) {
+            $configUses[$file] = HeaderFormatter::uses((string)file_get_contents($file));
+        }
 
         $cwd = (string)getcwd();
         chdir($work);
@@ -394,7 +398,7 @@ class UpgradeShell extends AppShell
         } finally {
             chdir($cwd);
         }
-        $this->_formatHeaders($plan, $configFiles);
+        $this->_formatHeaders($plan, $configFiles, $configUses);
         if ($code !== 0) {
             if ($before !== null) {
                 (new Folder(dirname($work, 2)))->delete();
@@ -446,16 +450,17 @@ class UpgradeShell extends AppShell
      *
      * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
      * @param array<string, string> $hashes The hashes of the other files before Rector, by path
+     * @param array<string, array<string>> $uses The use statements of the other files before Rector, by path
      * @return void
      */
-    protected function _formatHeaders(NamespacePlan $plan, array $hashes)
+    protected function _formatHeaders(NamespacePlan $plan, array $hashes, array $uses = [])
     {
         $changed = array_keys(array_filter($hashes, static fn(string $hash, string $file): bool => md5_file($file) !== $hash, ARRAY_FILTER_USE_BOTH));
         foreach (array_merge(array_keys($plan->files), $changed) as $file) {
             if (!is_file($file)) {
                 continue;
             }
-            $contents = HeaderFormatter::format((string)file_get_contents($file));
+            $contents = HeaderFormatter::format((string)file_get_contents($file), $uses[$file] ?? []);
             if (in_array($file, $plan->aliases, true)) {
                 $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
             }

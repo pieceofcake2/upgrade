@@ -86,6 +86,25 @@ class HeaderFormatterTest extends CakeTestCase
     }
 
     /**
+     * The use statements that the file had before Rector stay first, as in config/core.php of pieceofcake2/app
+     *
+     * @return void
+     */
+    public function testOriginalUsesFirst(): void
+    {
+        $before = "<?php\n/**\n * Core configuration\n */\n\nuse Symfony\\Component\\Dotenv\\Dotenv;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n";
+        $after = "<?php\n/**\n * Core configuration\n */\n\nuse Cake\\Core\\Configure;\nuse Symfony\\Component\\Dotenv\\Dotenv;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n";
+
+        $this->assertSame(['use Symfony\\Component\\Dotenv\\Dotenv;'], HeaderFormatter::uses($before));
+        $this->assertSame(
+            "<?php\n/**\n * Core configuration\n */\n\nuse Symfony\\Component\\Dotenv\\Dotenv;\nuse Cake\\Core\\Configure;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n",
+            HeaderFormatter::format($after, HeaderFormatter::uses($before)),
+        );
+        $this->assertSame([], HeaderFormatter::uses("<?php\nConfigure::write('debug', 0);\n"));
+        $this->assertSame([], HeaderFormatter::uses("<?php\nclass {\n"));
+    }
+
+    /**
      * Files that are formatted already, and files that cannot be formatted: templates, braces, invalid code, CRLF
      *
      * @return void

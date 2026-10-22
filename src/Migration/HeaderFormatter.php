@@ -35,7 +35,8 @@ use PhpParser\ParserFactory;
  *
  * Rector keeps the formatting of the statements that it does not change, so it prints the new namespace and use
  * statements wherever the old statements were, around the docblock of the file. The rest of the file stays as it is.
- * A file without a namespace (`config/core.php`) is only changed when it starts with use statements.
+ * A file without a namespace (`config/core.php`) is only changed when it starts with use statements. The use
+ * statements that the file had before Rector stay first, as Rector adds the new ones before them.
  */
 final class HeaderFormatter
 {
@@ -43,9 +44,10 @@ final class HeaderFormatter
      * Orders the beginning of the code
      *
      * @param string $code The code of a file with one namespace without braces
+     * @param array<string> $original The use statements that go first, as `uses()` returns them
      * @return string The code
      */
-    public static function format(string $code): string
+    public static function format(string $code, array $original = []): string
     {
         if (!str_starts_with($code, '<?php')) {
             return $code;
@@ -78,14 +80,38 @@ final class HeaderFormatter
 
         $eol = str_contains($code, "\r\n") ? "\r\n" : "\n";
         $text = static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1);
+        $useTexts = array_map($text, $uses);
+        $kept = array_values(array_intersect($original, $useTexts));
+        $useTexts = array_merge($kept, array_values(array_diff($useTexts, $kept)));
         $blocks = array_filter([
             implode($eol, $docs),
             implode($eol, array_map($text, $declares)),
             $namespace !== null ? 'namespace ' . $namespace . ';' : '',
-            implode($eol, array_map($text, $uses)),
+            implode($eol, $useTexts),
         ], static fn(string $block): bool => $block !== '');
 
         return '<?php' . $eol . ($docs === [] ? $eol : '') . implode($eol . $eol, $blocks) . $eol . $eol . $rest;
+    }
+
+    /**
+     * The use statements of the beginning of a file, as written
+     *
+     * @param string $code The code
+     * @return array<string>
+     */
+    public static function uses(string $code): array
+    {
+        try {
+            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($code) ?? [];
+        } catch (Error) {
+            return [];
+        }
+        $head = self::head($stmts);
+        if ($head === null) {
+            return [];
+        }
+
+        return array_map(static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1), $head[2]);
     }
 
     /**
