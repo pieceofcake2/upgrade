@@ -249,9 +249,11 @@ class UpgradeShell extends AppShell
         // Read before the moves, which may move this plugin (Plugin/Upgrade/ to plugins/Upgrade/) and its autoloading
         $composer = $root . DS . 'composer.json';
         $json = is_file($composer) && $plan->paths !== [] ? new ComposerJson((string)file_get_contents($composer)) : null;
+        // Before the moves, which Git sees as changes of the moved files
+        $committed = $entryFiles !== null ? $this->_committedEntryFiles($root, $entryFiles, $mover) : [];
         $this->_move($plan, $mover, $dryRun);
         if ($entryFiles !== null) {
-            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun);
+            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun, $committed);
             $this->_reviewEntryFiles($root, $plan, $dryRun);
         }
         if ($json !== null) {
@@ -308,9 +310,10 @@ class UpgradeShell extends AppShell
      * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
      * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves and removes the files
      * @param bool $dryRun Whether to only show the changes
+     * @param array<string> $committed The old entry files to replace whose contents Git has
      * @return void
      */
-    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun, array $committed = [])
     {
         foreach ($entryFiles->directories as $dir) {
             $this->out(__d('cake_console', 'Create the directory %s', $dir));
@@ -332,29 +335,59 @@ class UpgradeShell extends AppShell
                 chmod($path, 0755);
             }
         }
+        if (isset($entryFiles->replaced[EntryFiles::DEFINE]) && !in_array(EntryFiles::DEFINE, $committed, true)) {
+            // The old config/define.php stays: review it, its constants and those of the other old entry files
+            $entryFiles->review[] = EntryFiles::DEFINE;
+            if ($entryFiles->kept !== []) {
+                $this->out(__d('cake_console', '<warning>config/define.php is not replaced, so these constants of the old entry files were not added to it: %s.</warning>', implode(', ', array_keys($entryFiles->kept))));
+                $entryFiles->kept = [];
+            }
+        }
         foreach ($entryFiles->kept as $constant => $file) {
             $this->out(__d('cake_console', 'Keep the constant %s of %s in config/define.php', $constant, $file));
         }
-        $this->_replaceOldEntryFiles($root, $entryFiles, $mover, $dryRun);
+        $this->_replaceOldEntryFiles($root, $entryFiles, $dryRun, $committed);
         $this->_removeOldEntryFiles($root, $entryFiles, $mover, $dryRun);
     }
 
     /**
-     * Replaces the old entry files that are at the place of a new one (`webroot/index.php` of an application whose
-     * root is the directory `app/` of CakePHP 2), when Git keeps their contents; else they stay and are listed
+     * The old entry files to replace whose contents Git has (tracked and committed), before the moves
      *
      * @param string $root The root of the project
      * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
      * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Checks the files in Git
+     * @return array<string> The files, at their place after the moves
+     */
+    protected function _committedEntryFiles($root, EntryFiles $entryFiles, Mover $mover)
+    {
+        $committed = [];
+        foreach (array_keys($entryFiles->replaced) as $file) {
+            $source = $entryFiles->sources[$file] ?? $file;
+            if ($mover->isCommitted($root . DS . str_replace('/', DS, $source))) {
+                $committed[] = $file;
+            }
+        }
+
+        return $committed;
+    }
+
+    /**
+     * Replaces the old entry files that are at the place of a new one (`webroot/index.php` of an application whose
+     * root is the directory `app/` of CakePHP 2, a `define.php` in the old form), when Git keeps their contents; else
+     * they stay and are listed
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
      * @param bool $dryRun Whether to only show the changes
+     * @param array<string> $committed The files whose contents Git has
      * @return void
      */
-    protected function _replaceOldEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    protected function _replaceOldEntryFiles($root, EntryFiles $entryFiles, $dryRun, array $committed)
     {
         $left = [];
         foreach ($entryFiles->replaced as $file => $contents) {
             $path = $root . DS . str_replace('/', DS, $file);
-            if (!$mover->isCommitted($path)) {
+            if (!in_array($file, $committed, true)) {
                 $left[] = $file;
                 continue;
             }
@@ -403,7 +436,7 @@ class UpgradeShell extends AppShell
                 $plan->notices[] = $notice;
             }
         }
-        $plan->notices[] = sprintf('Kept %s, which the application has: review them for the new layout.', implode(', ', $review));
+        $plan->notices[] = sprintf('Kept the entry files that the application has, review them for the new layout: %s.', implode(', ', $review));
     }
 
     /**
@@ -439,7 +472,7 @@ class UpgradeShell extends AppShell
     protected function _removeOldEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
     {
         $left = [];
-        foreach (array_diff($entryFiles->oldFiles, array_keys($entryFiles->replaced)) as $file) {
+        foreach (array_diff($entryFiles->oldFiles, $entryFiles->sources) as $file) {
             $path = $root . DS . str_replace('/', DS, $file);
             if ($dryRun ? $mover->canRemove($path) : $mover->remove($path)) {
                 $this->out(__d('cake_console', 'Remove %s, which the files of pieceofcake2/app replace', $file));

@@ -300,9 +300,14 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString("if (getenv('LAMBDA_TASK_ROOT') !== false) {", (string)file_get_contents($app . '/bin/cake'));
         $this->assertStringContainsString('autoload.classmap: Controller/ => src/Controller/', $output);
         $this->assertStringContainsString('Update composer.json: extra.installer-paths: plugins/{$name}/ for type:cakephp-plugin', $output);
-        $this->assertStringContainsString('Kept config/define.php, bin/cake, which the application has: review them for the new layout.', $output);
-        $this->assertStringContainsString('config/define.php was kept: compare it with resources/skeleton/config/define.php of pieceofcake2/upgrade, as it defines ROOT and APP_DIR with other values than the new layout', $output);
-        $this->assertStringContainsString('config/define.php exists, so these constants of the old entry files were not added to it: SHOP_NAME, SHOP_CURRENCY.', $output);
+        $this->assertStringContainsString('Kept the entry files that the application has, review them for the new layout: bin/cake.', $output);
+        // Config/define.php in the old form: replaced, with the constants of its own and of the old entry files
+        $this->assertStringContainsString('Replace config/define.php of the CakePHP 2 layout with the one of pieceofcake2/app', $output);
+        $this->assertStringContainsString('Keep the constant SHOP_TAX of Config/define.php in config/define.php', $output);
+        $this->assertStringContainsString('Keep the constant SHOP_NAME of webroot/index.php in config/define.php', $output);
+        $this->assertStringContainsString('Config/define.php defines PAYMENT_URL under a condition', $output);
+        $this->assertStringStartsWith((string)file_get_contents(dirname(__DIR__, 4) . '/resources/skeleton/config/define.php'), rtrim((string)file_get_contents($app . '/config/define.php')) . "\n");
+        $this->assertStringNotContainsString('config/define.php was kept', $output);
         $this->assertStringContainsString('webroot/index.php defines IMAGES_DIR from ROOT, APP_DIR of the CakePHP 2 layout', $output);
         $this->assertStringContainsString('webroot/index.php defines SHOP_DEMO under a condition', $output);
         $this->assertStringContainsString('index.php leads to webroot/: set the document root of the web server to webroot/, then delete it.', $output);
@@ -336,9 +341,59 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString("// Kept from webroot/index.php\nif (!defined('SHOP_NAME')) {\n    define('SHOP_NAME', 'Acme Shop');\n}\n", (string)file_get_contents($app . '/config/define.php'));
         $this->assertStringContainsString('Keep the constant SHOP_CURRENCY of Console/cake.php in config/define.php', $output);
         $this->assertStringNotContainsString('IMAGES_DIR', (string)file_get_contents($app . '/config/define.php'));
-        $this->assertStringContainsString('Kept bin/cake, which the application has', $output);
+        $this->assertStringContainsString('Kept the entry files that the application has, review them for the new layout: bin/cake.', $output);
         $this->assertFileExists($app . '/src/Controller/PagesController.php');
         $this->assertSame([], $this->_errors);
+    }
+
+    /**
+     * A `Config/define.php` in the old form with changes that are not committed stays, with its constants and those of
+     * the old entry files, and is listed
+     *
+     * @return void
+     */
+    public function testRootApplicationOldDefineNotCommitted(): void
+    {
+        $app = $this->_copy('legacy-root-app', 'app');
+        $this->_commit($app, ['Plugin/Tags']);
+        file_put_contents($app . '/Config/define.php', "\ndefine('SHOP_LOCALE', 'de_DE');\n", FILE_APPEND);
+        $define = (string)file_get_contents($app . '/Config/define.php');
+
+        $this->_run($app, ['layout']);
+
+        $output = $this->out->output;
+        $this->assertSame($define, file_get_contents($app . '/config/define.php'));
+        $this->assertStringNotContainsString('Replace config/define.php of the CakePHP 2 layout with the one of', $output);
+        $this->assertStringContainsString('Replace config/define.php of the CakePHP 2 layout with the files of pieceofcake2/app in resources/skeleton/ of pieceofcake2/upgrade, once you have compared them', $output);
+        $this->assertStringContainsString('config/define.php is not replaced, so these constants of the old entry files were not added to it: SHOP_TAX, SHOP_LOCALE, SHOP_NAME, SHOP_CURRENCY.', $output);
+        $this->assertStringNotContainsString('Keep the constant', $output);
+        $this->assertStringContainsString('Kept the entry files that the application has, review them for the new layout: bin/cake, config/define.php.', $output);
+        $this->assertStringContainsString('config/define.php was kept: compare it with resources/skeleton/config/define.php of pieceofcake2/upgrade, as it defines ROOT and APP_DIR with other values than the new layout', $output);
+        // The other old entry files are replaced
+        $this->assertFileEquals(dirname(__DIR__, 4) . '/resources/skeleton/webroot/index.php', $app . '/webroot/index.php');
+    }
+
+    /**
+     * A `Config/define.php` in the form of pieceofcake2/app stays, with the paths of the moved directories updated
+     *
+     * @return void
+     */
+    public function testRootApplicationNewDefine(): void
+    {
+        $app = $this->_copy('legacy-root-app', 'app');
+        $skeleton = (string)file_get_contents(dirname(__DIR__, 4) . '/resources/skeleton/config/define.php');
+        file_put_contents($app . '/Config/define.php', $skeleton . "\nif (!defined('SCHEMA')) {\n    define('SCHEMA', ROOT . DS . 'Config' . DS . 'Schema' . DS);\n}\n");
+        $this->_commit($app, ['Plugin/Tags']);
+
+        $this->_run($app, ['layout']);
+
+        $output = $this->out->output;
+        $this->assertSame($skeleton . "\nif (!defined('SCHEMA')) {\n    define('SCHEMA', ROOT . DS . 'config' . DS . 'Schema' . DS);\n}\n", file_get_contents($app . '/config/define.php'));
+        $this->assertStringContainsString("Update the paths of config/define.php: 'Config' => 'config'", $output);
+        $this->assertStringContainsString('Kept the entry files that the application has, review them for the new layout: config/define.php, bin/cake.', $output);
+        $this->assertStringNotContainsString('Replace config/define.php', $output);
+        $this->assertStringNotContainsString('config/define.php was kept', $output);
+        $this->assertStringContainsString('config/define.php exists, so these constants of the old entry files were not added to it: SHOP_NAME, SHOP_CURRENCY.', $output);
     }
 
     /**

@@ -351,12 +351,15 @@ An application without `app/`, whose root is the directory `app/` of CakePHP 2 (
 - The old `webroot/index.php` and `webroot/test.php` (they define `APP_DIR` or `CAKE_CORE_INCLUDE_PATH` and load no
   `define.php`) are at the place of the new ones: they are replaced when Git has their contents (tracked and
   committed), else they stay and are listed. `Console/cake`, `cake.php` and `cake.bat` are removed as above.
+- A `Config/define.php` in the old form (it defines `CAKE_CORE_INCLUDE_PATH`, or `ROOT` and `APP_DIR` for the old
+  layout) is replaced by the `config/define.php` of pieceofcake2/app the same way, when Git has its contents. Its own
+  constants are added to the new file, with those of the old entry files, and the ones built on the paths of the old
+  layout or defined under a condition are listed. When it stays, it is listed with what to compare: the new entry
+  files need `ROOT` (the root of the project), `APP_DIR` (`'src'`), `WEBROOT_DIR`, `WWW_ROOT` and `VENDORS`.
 - The entry files that the application already has in the style of pieceofcake2/app (a `bin/cake` or
-  `webroot/index.php` that loads a `define.php`, a `Config/define.php`) keep their code, e.g. settings for AWS
-  Lambda: only the paths of the moved directories in their strings change, e.g.
+  `webroot/index.php` that loads a `define.php`, a `config/define.php` like the one of pieceofcake2/app) keep their
+  code, e.g. settings for AWS Lambda: only the paths of the moved directories in their strings change, e.g.
   `dirname(__DIR__) . DS . 'Config' . DS . 'define.php'` becomes `dirname(__DIR__) . DS . 'config' . DS . 'define.php'`.
-  A kept `config/define.php` is compared with the one of pieceofcake2/app: its `ROOT` and `APP_DIR` were the paths of
-  the old layout, and the new entry files need `ROOT`, `APP_DIR`, `WEBROOT_DIR`, `WWW_ROOT` and `VENDORS`.
 - The constants of the old entry files that are built on `ROOT`, which was the parent directory of the application,
   are listed too.
 - `index.php` and `.htaccess` in the root lead to `webroot/` and stay: set the document root of the web server to

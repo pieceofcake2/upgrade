@@ -369,13 +369,17 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
   を読み込まないもの) は、新しいファイルと同じ場所にあります。Git がその内容を持っている (追跡されていて、
   変更がコミット済みの) 場合は新しいファイルに置き換え、そうでなければ残して一覧で表示します。`Console/cake`、
   `cake.php`、`cake.bat` は上と同じように削除します。
+- 古い形式の `Config/define.php` (`CAKE_CORE_INCLUDE_PATH` を定義するもの、または `ROOT` と `APP_DIR` を古い構成に
+  合わせて定義するもの) も同じように、Git がその内容を持っている場合は pieceofcake2/app の `config/define.php` に
+  置き換えます。このファイル独自の定数は、古いエントリーファイルの定数と一緒に新しいファイルに追加し、古い構成の
+  パスから作る定数や条件の中で定義する定数は一覧で表示します。置き換えずに残した場合は、比べるべき点と一緒に
+  一覧で表示します。新しいエントリーファイルには `ROOT` (プロジェクトのルート)、`APP_DIR` (`'src'`)、
+  `WEBROOT_DIR`、`WWW_ROOT`、`VENDORS` が必要です。
 - アプリケーションがすでに持っている pieceofcake2/app 形式のエントリーファイル (`define.php` を読み込む
-  `bin/cake` や `webroot/index.php`、`Config/define.php`) は、AWS Lambda 向けの設定などの独自のコードを残します。
-  変えるのは文字列の中の移動したディレクトリのパスだけです。たとえば
+  `bin/cake` や `webroot/index.php`、pieceofcake2/app と同じ形式の `config/define.php`) は、AWS Lambda 向けの
+  設定などの独自のコードを残します。変えるのは文字列の中の移動したディレクトリのパスだけです。たとえば
   `dirname(__DIR__) . DS . 'Config' . DS . 'define.php'` は
-  `dirname(__DIR__) . DS . 'config' . DS . 'define.php'` になります。残した `config/define.php` は
-  pieceofcake2/app のものと比べて表示します。`ROOT` と `APP_DIR` は古い構成のパスになっていて、新しいエントリー
-  ファイルには `ROOT`、`APP_DIR`、`WEBROOT_DIR`、`WWW_ROOT`、`VENDORS` が必要だからです。
+  `dirname(__DIR__) . DS . 'config' . DS . 'define.php'` になります。
 - 古いエントリーファイルで `ROOT` (アプリケーションの親ディレクトリでした) から作る定数も一覧で表示します。
 - ルートにある `index.php` と `.htaccess` は `webroot/` につなぐファイルなので、そのまま残します。Web サーバーの
   ドキュメントルートを `webroot/` にしてから削除してください。

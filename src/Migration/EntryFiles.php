@@ -29,9 +29,12 @@ use PhpToken;
  *
  * In an application whose root is the directory `app/` of CakePHP 2, the old `webroot/index.php` and
  * `webroot/test.php` are at the place of the new ones: an old one (it defines `APP_DIR` or `CAKE_CORE_INCLUDE_PATH`
- * and loads no `define.php`) is replaced, another one is kept. An existing file is never overwritten otherwise: the
- * files that an application already has (`bin/cake`, `config/define.php`, ...) are kept, with the paths of the
- * moved directories updated (`'Config'` becomes `'config'`), and listed for review.
+ * and loads no `define.php`) is replaced, another one is kept. So is a `define.php` of the application in the old
+ * form, which defines `CAKE_CORE_INCLUDE_PATH`, or `ROOT` and `APP_DIR` for the old layout: its own constants are
+ * kept as those of the other old entry files. The shell replaces a file only when Git has its contents. An existing
+ * file is never overwritten otherwise: the files that an application already has (`bin/cake`, `config/define.php` in
+ * the form of pieceofcake2/app, ...) are kept, with the paths of the moved directories updated (`'Config'` becomes
+ * `'config'`), and listed for review.
  */
 final class EntryFiles
 {
@@ -117,6 +120,13 @@ final class EntryFiles
     public array $replaced = [];
 
     /**
+     * The paths before the moves of the old entry files that are replaced, by file
+     *
+     * @var array<string, string>
+     */
+    public array $sources = [];
+
+    /**
      * The entry files that the application has, which are kept and listed for review, relative to the root after the
      * moves
      *
@@ -173,6 +183,16 @@ final class EntryFiles
                 continue;
             }
             $plan->oldFiles[] = $file;
+            if (in_array($file, self::FILES, true)) {
+                $plan->sources[$file] = $file;
+            }
+        }
+        // A define.php of the application in the old form, e.g. Config/define.php that bin/cake loads
+        $define = self::pathBefore($moves, self::DEFINE);
+        $definePath = $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $define);
+        if ($base !== null && Paths::exists($definePath) && is_file($definePath) && self::isOldDefine((string)file_get_contents($definePath))) {
+            array_unshift($plan->oldFiles, $define);
+            $plan->sources[self::DEFINE] = $define;
         }
         $defines = $plan->customDefines($root, $base === '');
         foreach (self::FILES as $file) {
@@ -180,7 +200,7 @@ final class EntryFiles
             if ($file === self::DEFINE && $defines !== []) {
                 $contents = rtrim($contents) . "\n" . implode('', $defines);
             }
-            if (in_array($file, $plan->oldFiles, true)) {
+            if (isset($plan->sources[$file])) {
                 $plan->replaced[$file] = $contents;
                 continue;
             }
@@ -192,7 +212,7 @@ final class EntryFiles
             }
             $plan->files[$file] = $contents;
         }
-        if ($plan->kept !== [] && !isset($plan->files[self::DEFINE])) {
+        if ($plan->kept !== [] && !isset($plan->files[self::DEFINE]) && !isset($plan->replaced[self::DEFINE])) {
             $plan->notices[] = sprintf(
                 'config/define.php exists, so these constants of the old entry files were not added to it: %s.',
                 implode(', ', array_keys($plan->kept)),
@@ -218,6 +238,63 @@ final class EntryFiles
     public static function isOld(string $code): bool
     {
         return preg_match('/\bdefine\(\s*[\'"](APP_DIR|CAKE_CORE_INCLUDE_PATH)[\'"]/', $code) === 1 && !str_contains($code, 'define.php');
+    }
+
+    /**
+     * Whether a `define.php` of the application is in the old form: it defines `CAKE_CORE_INCLUDE_PATH`, or `ROOT` or
+     * `APP_DIR` with other values than the one of pieceofcake2/app (the root of the project and `'src'`)
+     *
+     * @param string $code The code of the file
+     * @return bool
+     */
+    public static function isOldDefine(string $code): bool
+    {
+        return preg_match('/\bdefine\(\s*[\'"]CAKE_CORE_INCLUDE_PATH[\'"]/', $code) === 1 || self::otherPaths($code) !== [];
+    }
+
+    /**
+     * The constants `ROOT` and `APP_DIR` that a `define.php` defines with other values than the one of
+     * pieceofcake2/app
+     *
+     * @param string $code The code of the file
+     * @return array<string>
+     */
+    private static function otherPaths(string $code): array
+    {
+        // The values of pieceofcake2/app
+        $values = ['ROOT' => 'dirname\(__DIR__\)', 'APP_DIR' => '[\'"]src[\'"]'];
+        $other = [];
+        foreach ($values as $constant => $value) {
+            if (
+                preg_match('/\bdefine\(\s*[\'"]' . $constant . '[\'"]/', $code)
+                && !preg_match('/\bdefine\(\s*[\'"]' . $constant . '[\'"]\s*,\s*' . $value . '\s*\)/', $code)
+            ) {
+                $other[] = $constant;
+            }
+        }
+
+        return $other;
+    }
+
+    /**
+     * The path of a file before the moves
+     *
+     * @param array<array{string, string}> $moves The moves, relative to the root, with slashes
+     * @param string $path The path after the moves, relative to the root
+     * @return string
+     */
+    private static function pathBefore(array $moves, string $path): string
+    {
+        foreach ($moves as [$from, $to]) {
+            if ($path === $to) {
+                return $from;
+            }
+            if (str_starts_with($path, $to . '/')) {
+                return $from . substr($path, strlen($to));
+            }
+        }
+
+        return $path;
     }
 
     /**
@@ -262,21 +339,11 @@ final class EntryFiles
      */
     public static function defineNotice(string $code): ?string
     {
-        $defined = [];
-        $missing = [];
-        foreach (self::DEFINE_CONSTANTS as $constant) {
-            if (preg_match('/\bdefine\(\s*[\'"]' . $constant . '[\'"]/', $code)) {
-                $defined[] = $constant;
-            } else {
-                $missing[] = $constant;
-            }
-        }
-        // The values of pieceofcake2/app
-        $values = ['ROOT' => 'dirname\(__DIR__\)', 'APP_DIR' => '[\'"]src[\'"]'];
-        $other = array_filter(
-            array_intersect($defined, array_keys($values)),
-            static fn(string $constant): bool => !preg_match('/\bdefine\(\s*[\'"]' . $constant . '[\'"]\s*,\s*' . $values[$constant] . '\s*\)/', $code),
-        );
+        $missing = array_values(array_filter(
+            self::DEFINE_CONSTANTS,
+            static fn(string $constant): bool => !preg_match('/\bdefine\(\s*[\'"]' . $constant . '[\'"]/', $code),
+        ));
+        $other = self::otherPaths($code);
         $checks = [];
         if ($other !== []) {
             $checks[] = sprintf('it defines %s with other values than the new layout (ROOT is the root of the project, APP_DIR is \'src\')', implode(' and ', $other));

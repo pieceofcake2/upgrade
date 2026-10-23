@@ -26,6 +26,21 @@ class EntryFilesTest extends CakeTestCase
     }
 
     /**
+     * A define.php in the old form defines CAKE_CORE_INCLUDE_PATH, or ROOT and APP_DIR for the CakePHP 2 layout
+     *
+     * @return void
+     */
+    public function testIsOldDefine(): void
+    {
+        $skeleton = (string)file_get_contents(dirname(__DIR__, 3) . DS . 'resources' . DS . 'skeleton' . DS . 'config' . DS . 'define.php');
+        $this->assertFalse(EntryFiles::isOldDefine($skeleton));
+        $this->assertFalse(EntryFiles::isOldDefine("<?php\nif (getenv('LAMBDA_TASK_ROOT') !== false) {\n    define('TMP', '/tmp/');\n}\n"));
+        $this->assertTrue(EntryFiles::isOldDefine("<?php\ndefine('ROOT', dirname(__DIR__, 2));\ndefine('APP_DIR', basename(dirname(__DIR__)));\n"));
+        $this->assertTrue(EntryFiles::isOldDefine(str_replace("'src'", "'app'", $skeleton)));
+        $this->assertTrue(EntryFiles::isOldDefine("<?php\ndefine('CAKE_CORE_INCLUDE_PATH', ROOT . DS . 'lib');\n"));
+    }
+
+    /**
      * The paths of the moved directories in the strings of a kept entry file
      *
      * @return void

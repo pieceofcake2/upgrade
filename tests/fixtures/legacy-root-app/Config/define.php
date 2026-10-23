@@ -8,3 +8,11 @@ if (!defined('ROOT')) {
 if (!defined('APP_DIR')) {
     define('APP_DIR', basename(dirname(__DIR__)));
 }
+
+// The settings of the shop
+if (!defined('SHOP_TAX')) {
+    define('SHOP_TAX', 0.2);
+}
+if (getenv('SHOP_SANDBOX')) {
+    define('PAYMENT_URL', 'https://sandbox.example.com/');
+}
