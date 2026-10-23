@@ -26,6 +26,7 @@ use PieceOfCake2\Upgrade\Migration\Mover;
 use PieceOfCake2\Upgrade\Migration\NameImporter;
 use PieceOfCake2\Upgrade\Migration\NamespacePlan;
 use PieceOfCake2\Upgrade\Migration\Paths;
+use PieceOfCake2\Upgrade\Migration\References;
 use PieceOfCake2\Upgrade\Rector\Report;
 
 App::uses('AppShell', 'Console/Command');
@@ -276,6 +277,9 @@ class UpgradeShell extends AppShell
             }
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        if ($plan->moves !== []) {
+            $this->_reviewTemplateReferences($plan, $dryRun);
+        }
         if (!$nothing && !$dryRun && $plugin) {
             $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace --plugin %s` moves the classes into a namespace.', $plugin));
         } elseif (!$nothing && !$dryRun) {
@@ -443,6 +447,40 @@ class UpgradeShell extends AppShell
     }
 
     /**
+     * Lists the lines of `templates/`, `config/` and `src/` that name the templates of the CakePHP 2 layout
+     * (`.ctp`, `.thtml`, `Layouts/`, `Elements/`, `Emails/`, `Errors/`), which the moves did not change: texts and
+     * comments such as `templates/Pages/home.ctp`, or the paths of the code
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param bool $dryRun Whether the moves are only shown
+     * @return void
+     */
+    protected function _reviewTemplateReferences(LayoutPlan $plan, $dryRun)
+    {
+        // The templates of bake keep .ctp
+        $lines = References::find($plan->root, ['templates', 'config', 'src'], References::TEMPLATES, ['src/Console/Templates'], $dryRun ? $plan->moves : []);
+        $this->_reviewReferences(__d('cake_console', 'These lines name the templates of the CakePHP 2 layout, which are now .php files in templates/ with the directories layout/, element/, email/ and Error/. Review them, they were not changed:'), $lines);
+    }
+
+    /**
+     * Prints the lines that name paths of the old layout, for a review
+     *
+     * @param string $message What to review
+     * @param array<string> $lines The lines, as `<file>:<line>: <text>`
+     * @return void
+     */
+    protected function _reviewReferences($message, array $lines)
+    {
+        if ($lines === []) {
+            return;
+        }
+        $this->out(sprintf('<warning>%s</warning>', $message));
+        foreach ($lines as $line) {
+            $this->out('  ' . $line);
+        }
+    }
+
+    /**
      * Updates the paths of the moved directories in the entry files that the application has (`bin/cake`,
      * `config/define.php`, ...), and lists them for review
      *
@@ -585,11 +623,13 @@ class UpgradeShell extends AppShell
             $this->_addAppNamespace($work, $namespace);
         }
         $this->_updateComposerJson($plan, $root, $work, $dryRun);
+        $lines = References::find($work, ['config'], References::namespacePattern(!Paths::hasDirectory($work . DS . 'src', 'Lib')));
         if ($before !== null) {
             $this->out($this->_diff($before, $work));
             (new Folder(dirname($work, 2)))->delete();
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        $this->_reviewReferences(__d('cake_console', 'These lines of config/ name the classmap of Composer, composer dump-autoload or src/Lib/, which PSR-4 and the moves to src/<Type>/ replace. Review them, they were not changed:'), $lines);
         if (!$dryRun) {
             $this->out(__d('cake_console', 'Next, review the changes (git diff), run composer dump-autoload and the tests. The code needs pieceofcake2/cakephp 2.13 or later.'));
         }

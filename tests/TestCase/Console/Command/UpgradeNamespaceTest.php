@@ -42,6 +42,13 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         // src/Lib/ keeps its placeholder file with MyTool.php; config/email.php.default is changed as config/*.php
         $this->assertStringNotContainsString('Remove src/Lib/', $output);
         $this->assertSame([], glob($app . '/config/*.upgrade-*') ?: []);
+        // The comments of config/ that name the classmap or src/Lib/<Type>/ are listed, not changed
+        $this->assertStringContainsString(
+            "Review them, they were not changed:\n" .
+            "  config/email.php.default:10: * Custom transports go in src/Lib/Network/Email, autoloaded by the Composer classmap.\n" .
+            'Next, ',
+            $output,
+        );
         $this->assertSame([], $this->_errors);
     }
 
@@ -174,6 +181,7 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->assertStringContainsString("--- bin/cake\n+++ bin/cake", $output);
         $this->assertStringContainsString("--- config/email.php.default\n+++ config/email.php.default", $output);
         $this->assertStringContainsString("+        'transport' => MailTransport::class,", $output);
+        $this->assertStringContainsString('  config/email.php.default:10: * Custom transports go in src/Lib/Network/Email', $output);
         $this->assertSame([], glob($app . '/config/*.upgrade-*') ?: []);
         $this->assertStringNotContainsString('webroot/css', $output);
         $this->assertStringNotContainsString(TMP, $output);

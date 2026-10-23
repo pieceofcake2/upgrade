@@ -405,6 +405,17 @@ What you do by hand, as the command lists it:
 - Remove `$ext = '.thtml'` from your controllers and views when `.thtml` templates became `.php`.
 - Paths in your code (`APP . 'Config' . DS`, `App::build()`), in your web server configuration, in `.gitignore`
   (`app/tmp/`) and in your deployment are not changed. The lines of `.gitignore` that name moved paths are listed.
+- The texts and comments that name the old templates are not changed, as only you can tell what they mean: after the
+  moves, the lines of `templates/`, `config/` and `src/` that name `.ctp` or `.thtml` files or the directories
+  `Layouts/`, `Elements/`, `Emails/` and `Errors/` are listed as `<file>:<line>` for a review (a dry run lists them
+  at the places of the files after the moves), e.g.
+
+  ```text
+  config/routes.php:29: * to use (in this case, templates/Pages/home.ctp)...
+  templates/Pages/home.php:322: <li><?php echo __d('cake_dev', 'To change its layout, edit: %s.', '<code>templates/Layouts/default.ctp</code>'); ?></li>
+  ```
+
+  The templates of bake in `src/Console/Templates/` keep `.ctp` and are not listed.
 
 ### `namespace`
 
@@ -497,6 +508,14 @@ What `namespace` does not change, as the command lists it or as you check it:
   the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `paginate()`,
   which CakePHP reads as a model alias).
 - Data with the old class names: serialized objects in caches and sessions. Clear the caches.
+- The comments of `config/` that name the classmap of Composer, `composer dump-autoload` or the paths of `src/Lib/`
+  that moved (`src/Lib/Error`, and `src/Lib/` itself once it is removed) are listed as `<file>:<line>` for a review,
+  e.g.
+
+  ```text
+  config/core.php:61: *   A custom handler class in src/ is autoloaded by the Composer classmap (run `composer dump-autoload`
+  config/core.php:90: *   should place the file for that class in src/Lib/Error. This class needs to implement a render method.
+  ```
 
 Run `composer dump-autoload` and your tests afterwards, and review the changes with `git diff`.
 
