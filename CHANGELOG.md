@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## Unreleased
+## v1.1.0 (2026-10-23)
 
 - New `rector` command, which runs the Rector rules of the plugin for a change of pieceofcake2/cakephp: the sets
   `variadic-arguments` ([PR #20](https://github.com/pieceofcake2/upgrade/pull/20)) and `namespaced-classes`
