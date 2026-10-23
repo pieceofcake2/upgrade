@@ -449,6 +449,9 @@ Then it changes the code with Rector:
   and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
   `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
   class names of the settings. The use statements go after the docblock of the file, between blank lines.
+- The default files of `config/` (`email.php.default`, `database.php.default`), which you copy to `email.php` and
+  `database.php`, get the same changes as the files of `config/`, e.g. `'transport' => MailTransport::class`, so that
+  a new copy matches the changed configuration.
 - A template gets the use statements at the top, as in the templates of pieceofcake2/app, also for the classes of its
   docblocks (`use Cake\View\View;` for `@var View $this`): in its first block of PHP when it starts with one (after
   the docblock), else in a new block:

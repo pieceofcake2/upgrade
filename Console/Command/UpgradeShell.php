@@ -54,6 +54,13 @@ class UpgradeShell extends AppShell
     protected $_paths = [];
 
     /**
+     * The names of the files in the report of Rector, by name of their temporary copy
+     *
+     * @var array<string, string>
+     */
+    protected $_reportNames = [];
+
+    /**
      * Map
      *
      * @var array
@@ -174,6 +181,8 @@ class UpgradeShell extends AppShell
             unlink($report);
         }
         if ($lines !== []) {
+            // The places in the copies of the default files of config/ are the ones of the default files
+            $lines = array_map(fn(string $line): string => strtr($line, $this->_reportNames), $lines);
             sort($lines);
             $this->out(__d('cake_console', '<warning>Review these places:</warning>'));
             foreach ($lines as $line) {
@@ -548,16 +557,21 @@ class UpgradeShell extends AppShell
         }
         $this->_removeLib($plan, $mover);
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
-        $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
-
-        $cwd = (string)getcwd();
-        chdir($work);
+        // Rector reads .php files: the default files of config/ go through copies
+        $copies = $this->_copyDefaultFiles($plan);
         try {
-            $code = $this->_runNamespaceRules($plan, $plugin ? null : $namespace);
+            $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
+            $cwd = (string)getcwd();
+            chdir($work);
+            try {
+                $code = $this->_runNamespaceRules($plan, $plugin ? null : $namespace);
+            } finally {
+                chdir($cwd);
+            }
+            $this->_formatHeaders($plan, $hashes);
         } finally {
-            chdir($cwd);
+            $this->_restoreDefaultFiles($copies);
         }
-        $this->_formatHeaders($plan, $hashes);
         if ($code !== 0) {
             if ($before !== null) {
                 (new Folder(dirname($work, 2)))->delete();
@@ -604,6 +618,47 @@ class UpgradeShell extends AppShell
                 $this->out(__d('cake_console', 'Remove %s/, which holds no classes, only placeholder files', $dir));
             }
         }
+    }
+
+    /**
+     * Copies the default files of `config/` (`email.php.default`) to temporary `.php` files, which Rector reads
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @return array<string, string> The default files, by copy
+     */
+    protected function _copyDefaultFiles(NamespacePlan $plan)
+    {
+        $copies = [];
+        foreach ($plan->defaultFiles() as $file) {
+            $copy = $file . '.upgrade-' . getmypid() . '.php';
+            if (copy($file, $copy)) {
+                $copies[$copy] = $file;
+                $this->_reportNames[basename($copy)] = basename($file);
+            }
+        }
+
+        return $copies;
+    }
+
+    /**
+     * Writes the changes of the copies of the default files of `config/` back to them, and removes the copies
+     *
+     * @param array<string, string> $copies The default files, by copy
+     * @return void
+     */
+    protected function _restoreDefaultFiles(array $copies)
+    {
+        foreach ($copies as $copy => $file) {
+            if (!is_file($copy)) {
+                continue;
+            }
+            $contents = (string)file_get_contents($copy);
+            if ($contents !== (string)file_get_contents($file)) {
+                file_put_contents($file, $contents);
+            }
+            unlink($copy);
+        }
+        $this->_reportNames = [];
     }
 
     /**

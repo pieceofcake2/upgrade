@@ -470,6 +470,9 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
   使っている CakePHP とアプリケーションのクラスに `use` を付けます (`Configure::write()` には
   `use Cake\Core\Configure;`)。変わるのは名前と設定のクラス名だけで、ほかのコードはそのままです。`use` は
   ファイルの docblock の後に、前後に空行を入れて置きます。
+- `config/` のデフォルトのファイル (`email.php.default`、`database.php.default`。`email.php` や `database.php` に
+  コピーして使います) も、`config/` のファイルと同じように書き換えます (`'transport' => MailTransport::class`
+  など)。新しくコピーしたファイルが、書き換えた設定と同じ形になります。
 - テンプレートでは、pieceofcake2/app のテンプレートと同じように、先頭に `use` を置きます。docblock に書かれた
   クラスにも `use` を付けます (`@var View $this` には `use Cake\View\View;`)。テンプレートが PHP のブロックで
   始まる場合はそのブロックの中 (docblock の後) に、そうでなければ新しいブロックに置きます。

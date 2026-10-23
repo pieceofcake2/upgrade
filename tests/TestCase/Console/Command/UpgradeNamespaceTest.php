@@ -39,8 +39,9 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('autoload.psr-4: App\ => src/', $output);
         $this->assertStringContainsString('autoload-dev.psr-4: App\Test\ => tests/', $output);
         $this->assertStringContainsString('autoload.exclude-from-classmap: vendor/pieceofcake2/cakephp/src/Routing/Dispatcher.php', $output);
-        // src/Lib/ keeps its placeholder file with MyTool.php
+        // src/Lib/ keeps its placeholder file with MyTool.php; config/email.php.default is changed as config/*.php
         $this->assertStringNotContainsString('Remove src/Lib/', $output);
+        $this->assertSame([], glob($app . '/config/*.upgrade-*') ?: []);
         $this->assertSame([], $this->_errors);
     }
 
@@ -171,6 +172,9 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->assertStringContainsString("--- webroot/index.php\n+++ webroot/index.php", $output);
         $this->assertStringContainsString('+use Cake\Routing\Dispatcher;', $output);
         $this->assertStringContainsString("--- bin/cake\n+++ bin/cake", $output);
+        $this->assertStringContainsString("--- config/email.php.default\n+++ config/email.php.default", $output);
+        $this->assertStringContainsString("+        'transport' => MailTransport::class,", $output);
+        $this->assertSame([], glob($app . '/config/*.upgrade-*') ?: []);
         $this->assertStringNotContainsString('webroot/css', $output);
         $this->assertStringNotContainsString(TMP, $output);
         $this->assertSame([], glob(TMP . 'upgrade-dry-run-*') ?: []);

@@ -6,6 +6,9 @@
   placeholder files (`empty`, `.gitkeep`), with `git rm` in a Git repository, as namespaced code has no `Lib`. It
   stays with any other file, e.g. `src/Lib/Foo.php` (`App\Lib\Foo`)
   ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
+- `namespace` also changes the default files of `config/` (`email.php.default`, `database.php.default`) as the files
+  of `config/`, e.g. `'transport' => 'Mail'` becomes `MailTransport::class`, so that a new `email.php` matches the
+  changed configuration ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
 
 ## v1.1.0 (2026-10-23)
 

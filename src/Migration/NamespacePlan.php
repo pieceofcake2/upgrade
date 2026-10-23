@@ -185,6 +185,20 @@ final class NamespacePlan
     }
 
     /**
+     * The default configuration files of `config/` (`email.php.default`, `database.php.default`), which the
+     * application copies to `email.php` and `database.php`: they get the same changes as the files of `config/`
+     *
+     * @return array<string>
+     */
+    public function defaultFiles(): array
+    {
+        $files = glob($this->path('config') . DIRECTORY_SEPARATOR . '*.php.default') ?: [];
+        sort($files);
+
+        return array_values(array_filter($files, 'is_file'));
+    }
+
+    /**
      * The entry files of an application, which `upgrade layout` creates: `bin/cake` and the PHP files of `webroot/`
      *
      * @return array<string>
