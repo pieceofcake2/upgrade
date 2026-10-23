@@ -18,6 +18,7 @@ class NameImporterTest extends CakeTestCase
      * @var array<string, string>
      */
     private const CLASSES = [
+        'Cache' => 'Cake\Cache\Cache',
         'Configure' => 'Cake\Core\Configure',
         'Debugger' => 'Cake\Utility\Debugger',
         'Folder' => 'Cake\Utility\Folder',
@@ -27,7 +28,7 @@ class NameImporterTest extends CakeTestCase
     ];
 
     /**
-     * A template that does not start with a block of PHP gets a new one at the top
+     * A template that does not start with a block of PHP gets a new one at the top, with the use statements sorted
      *
      * @return void
      */
@@ -42,14 +43,14 @@ class NameImporterTest extends CakeTestCase
 
         $code = "<?= Configure::read('App.title') ?>\n<p><?php echo h(Slug::normalize(\$title)); ?></p>\n";
         $this->assertSame(
-            "<?php\nuse Cake\\Core\\Configure;\nuse App\\Utility\\Slug;\n?>\n<?= Configure::read('App.title') ?>\n<p><?php echo h(Slug::normalize(\$title)); ?></p>\n",
+            "<?php\nuse App\\Utility\\Slug;\nuse Cake\\Core\\Configure;\n?>\n<?= Configure::read('App.title') ?>\n<p><?php echo h(Slug::normalize(\$title)); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
     }
 
     /**
-     * A template that starts with a block of PHP gets the use statements in it: after its docblock, as in the
-     * templates of CakePHP 5, else at its beginning
+     * A template that starts with a block of PHP gets the use statements in it, between blank lines: after its
+     * docblock, as in the templates of pieceofcake2/app, else at its beginning
      *
      * @return void
      */
@@ -58,34 +59,34 @@ class NameImporterTest extends CakeTestCase
         $code = "<?php\n/**\n * @var \\Cake\\View\\View \$this\n */\nif (!\\Cake\\Core\\Configure::read('debug')):\n    throw new \\Cake\\Error\\NotFoundException();\nendif;\n?>\n<p><?php \\Cake\\Utility\\Debugger::checkSecurityKeys(); ?></p>\n";
 
         $this->assertSame(
-            "<?php\n/**\n * @var \\Cake\\View\\View \$this\n */\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n<p><?php Debugger::checkSecurityKeys(); ?></p>\n",
+            "<?php\n/**\n * @var \\Cake\\View\\View \$this\n */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n<p><?php Debugger::checkSecurityKeys(); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
 
         $code = "<?php\n\$this->assign('title', \\Cake\\Core\\Configure::read('App.title'));\n?>\n<div></div>\n";
         $this->assertSame(
-            "<?php\nuse Cake\\Core\\Configure;\n\n\$this->assign('title', Configure::read('App.title'));\n?>\n<div></div>\n",
+            "<?php\n\nuse Cake\\Core\\Configure;\n\n\$this->assign('title', Configure::read('App.title'));\n?>\n<div></div>\n",
             NameImporter::import($code, self::CLASSES),
         );
 
         $code = "<?php\n/**\n * @var array \$posts\n */\n?>\n<p><?php echo Configure::read('App.title'); ?></p>\n";
         $this->assertSame(
-            "<?php\n/**\n * @var array \$posts\n */\nuse Cake\\Core\\Configure;\n?>\n<p><?php echo Configure::read('App.title'); ?></p>\n",
+            "<?php\n/**\n * @var array \$posts\n */\n\nuse Cake\\Core\\Configure;\n\n?>\n<p><?php echo Configure::read('App.title'); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
     }
 
     /**
-     * The new use statements go after the use statements of the file; an imported class gets its short name
+     * The new use statements are sorted with the use statements of the file; an imported class gets its short name
      *
      * @return void
      */
     public function testExistingUses(): void
     {
-        $code = "<?php\nuse Cake\\Core\\Configure;\n?>\n<p><?php echo \\Cake\\Core\\Configure::read('a') . Debugger::trace(); ?></p>\n";
+        $code = "<?php\nuse Cake\\Core\\Configure;\n?>\n<p><?php echo \\Cake\\Core\\Configure::read('a') . Debugger::trace() . Cache::read('b'); ?></p>\n";
 
         $this->assertSame(
-            "<?php\nuse Cake\\Core\\Configure;\nuse Cake\\Utility\\Debugger;\n?>\n<p><?php echo Configure::read('a') . Debugger::trace(); ?></p>\n",
+            "<?php\nuse Cake\\Cache\\Cache;\nuse Cake\\Core\\Configure;\nuse Cake\\Utility\\Debugger;\n?>\n<p><?php echo Configure::read('a') . Debugger::trace() . Cache::read('b'); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
     }

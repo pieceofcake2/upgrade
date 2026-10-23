@@ -59,7 +59,7 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         // stays as it is
         $this->assertStringStartsWith("<?php\nuse Cake\\Core\\Configure;\n?>\n<h2><?php echo h(\$message); ?></h2>\n<?php\nif (Configure::read('debug') > 0):\n", $file('templates/Error/error400.php'));
         $this->assertStringStartsWith(
-            "<?php\n/**\n * The home page\n *\n * @var View \$this\n */\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\nuse App\\Utility\\Slug;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n",
+            "<?php\n/**\n * The home page\n *\n * @var View \$this\n */\n\nuse App\\Utility\\Slug;\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n",
             $file('templates/Pages/home.php'),
         );
         // Templates without classes
@@ -67,17 +67,17 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
             $this->assertFileEquals($this->_fixture('app/' . $template), $app . DS . $template, $template);
         }
         // config/
-        $this->assertStringContainsString("use Cake\\Cache\\Cache;\nuse Cake\\Cache\\Engine\\FileEngine;\nuse Cake\\Core\\Configure;\n", $file('config/bootstrap.php'));
+        $this->assertStringContainsString(" */\n\nuse App\\Log\\Engine\\AuditLog;\nuse App\\Routing\\Filter\\MaintenanceFilter;\nuse Cake\\Cache\\Cache;\nuse Cake\\Cache\\Engine\\FileEngine;\nuse Cake\\Core\\CakePlugin;\nuse Cake\\Core\\Configure;\n", $file('config/bootstrap.php'));
         $this->assertStringContainsString("\nCache::config('default', ['engine' => FileEngine::class]);\n\nConfigure::write('Dispatcher.filters', [\n", $file('config/bootstrap.php'));
         $this->assertStringContainsString("\nCakePlugin::load('Blog');\n", $file('config/bootstrap.php'));
-        $this->assertStringStartsWith("<?php\n\nuse Cake\\Routing\\Router;\nuse App\\Routing\\Route\\SlugRoute;\nuse Cake\\Core\\CakePlugin;\n\nRouter::connect('/', ", $file('config/routes.php'));
-        $this->assertStringContainsString(" * @package       app.Config\n */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\ErrorHandler;\n", $file('config/core.php'));
+        $this->assertStringStartsWith("<?php\n\nuse App\\Routing\\Route\\SlugRoute;\nuse Cake\\Core\\CakePlugin;\nuse Cake\\Routing\\Router;\n\nRouter::connect('/', ", $file('config/routes.php'));
+        $this->assertStringContainsString(" * @package       app.Config\n */\n\nuse App\\Error\\AppExceptionRenderer;\nuse Cake\\Cache\\Cache;\n", $file('config/core.php'));
         $this->assertStringContainsString("/**\n * CakePHP Debug Level:\n */\nConfigure::write('debug', 0);\n", $file('config/core.php'));
         $this->assertFileEquals($this->_fixture('app/config/define.php'), $app . DS . 'config' . DS . 'define.php');
         // The entry files
-        $this->assertStringContainsString("\nuse Composer\\InstalledVersions;\nuse Cake\\Routing\\Dispatcher;\nuse Cake\\Network\\CakeRequest;\nuse Cake\\Network\\CakeResponse;\n\n", $file('webroot/index.php'));
+        $this->assertStringContainsString(" */\n\nuse Cake\\Network\\CakeRequest;\nuse Cake\\Network\\CakeResponse;\nuse Cake\\Routing\\Dispatcher;\nuse Composer\\InstalledVersions;\n\n", $file('webroot/index.php'));
         $this->assertStringEndsWith("\n\$dispatcher = new Dispatcher();\n\$dispatcher->dispatch(\n    new CakeRequest(),\n    new CakeResponse(),\n);\n", $file('webroot/index.php'));
-        $this->assertStringContainsString("\nuse Composer\\InstalledVersions;\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\TestSuite\\CakeTestSuiteDispatcher;\n\n", $file('webroot/test.php'));
+        $this->assertStringContainsString(" */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\TestSuite\\CakeTestSuiteDispatcher;\nuse Composer\\InstalledVersions;\n\n", $file('webroot/test.php'));
         $this->assertStringEndsWith("\nCakeTestSuiteDispatcher::run();\n", $file('webroot/test.php'));
         $this->assertStringStartsWith("#!/usr/bin/env php\n<?php\n/**\n", $file('bin/cake'));
         $this->assertStringContainsString(" * @license       https://opensource.org/licenses/mit-license.php MIT License\n */\n\nuse Cake\\Console\\ShellDispatcher;\n\nif (!defined('DS')) {\n", $file('bin/cake'));

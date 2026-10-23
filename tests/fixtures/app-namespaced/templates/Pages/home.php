@@ -4,10 +4,11 @@
  *
  * @var View $this
  */
+
+use App\Utility\Slug;
 use Cake\Core\Configure;
 use Cake\Error\NotFoundException;
 use Cake\Utility\Debugger;
-use App\Utility\Slug;
 
 if (!Configure::read('debug')):
     throw new NotFoundException();

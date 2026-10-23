@@ -2,9 +2,9 @@
 
 namespace Blog\Test\TestCase\Model;
 
+use Blog\Model\Post;
 use Cake\TestSuite\CakeTestCase;
 use Cake\Utility\ClassRegistry;
-use Blog\Model\Post;
 
 class PostTest extends CakeTestCase
 {

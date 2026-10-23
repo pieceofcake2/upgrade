@@ -13,7 +13,8 @@ use PieceOfCake2\Upgrade\Migration\HeaderFormatter;
 class HeaderFormatterTest extends CakeTestCase
 {
     /**
-     * The docblock of the file goes above the namespace, the docblock of the class stays with the class
+     * The docblock of the file goes above the namespace, the docblock of the class stays with the class, the use
+     * statements are sorted
      *
      * @return void
      */
@@ -22,7 +23,7 @@ class HeaderFormatterTest extends CakeTestCase
         $code = "<?php\nnamespace App\\Model;\nuse Cake\\Model\\Model;\nuse ArrayObject;\n/**\n * The file\n */\n\n/**\n * The class\n */\nclass Post extends Model\n{\n}\n";
 
         $this->assertSame(
-            "<?php\n/**\n * The file\n */\n\nnamespace App\\Model;\n\nuse Cake\\Model\\Model;\nuse ArrayObject;\n\n/**\n * The class\n */\nclass Post extends Model\n{\n}\n",
+            "<?php\n/**\n * The file\n */\n\nnamespace App\\Model;\n\nuse ArrayObject;\nuse Cake\\Model\\Model;\n\n/**\n * The class\n */\nclass Post extends Model\n{\n}\n",
             HeaderFormatter::format($code),
         );
     }
@@ -71,7 +72,8 @@ class HeaderFormatterTest extends CakeTestCase
     }
 
     /**
-     * An indented docblock keeps its indentation, as in config/routes.php of CakePHP 2
+     * An indented docblock keeps its indentation, as in config/routes.php of CakePHP 2, and the use statements get
+     * it, as in config/routes.php of pieceofcake2/app
      *
      * @return void
      */
@@ -80,28 +82,46 @@ class HeaderFormatterTest extends CakeTestCase
         $code = "<?php\nuse Cake\\Routing\\Router;\n    /**\n     * Routes configuration\n     */\n\n    /**\n     * The home page\n     */\n    Router::connect('/', []);\n";
 
         $this->assertSame(
-            "<?php\n    /**\n     * Routes configuration\n     */\n\nuse Cake\\Routing\\Router;\n\n    /**\n     * The home page\n     */\n    Router::connect('/', []);\n",
+            "<?php\n    /**\n     * Routes configuration\n     */\n\n    use Cake\\Routing\\Router;\n\n    /**\n     * The home page\n     */\n    Router::connect('/', []);\n",
             HeaderFormatter::format($code),
         );
     }
 
     /**
-     * The use statements that the file had before Rector stay first, as in config/core.php of pieceofcake2/app
+     * The use statements are sorted, the original ones with the new ones, as in config/core.php of pieceofcake2/app
      *
      * @return void
      */
-    public function testOriginalUsesFirst(): void
+    public function testSortedUses(): void
     {
-        $before = "<?php\n/**\n * Core configuration\n */\n\nuse Symfony\\Component\\Dotenv\\Dotenv;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n";
-        $after = "<?php\n/**\n * Core configuration\n */\n\nuse Cake\\Core\\Configure;\nuse Symfony\\Component\\Dotenv\\Dotenv;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n";
+        $code = "<?php
+/**
+ * Core configuration
+ */
 
-        $this->assertSame(['use Symfony\\Component\\Dotenv\\Dotenv;'], HeaderFormatter::uses($before));
+use Symfony\Component\Dotenv\Dotenv;
+use Cake\Core\Configure;
+use Cake\Cache\Cache;
+
+(new Dotenv())->bootEnv(ROOT . '/config/.env');
+Configure::write('debug', 0);
+";
+
         $this->assertSame(
-            "<?php\n/**\n * Core configuration\n */\n\nuse Symfony\\Component\\Dotenv\\Dotenv;\nuse Cake\\Core\\Configure;\n\n(new Dotenv())->bootEnv(ROOT . '/config/.env');\nConfigure::write('debug', 0);\n",
-            HeaderFormatter::format($after, HeaderFormatter::uses($before)),
+            "<?php
+/**
+ * Core configuration
+ */
+
+use Cake\Cache\Cache;
+use Cake\Core\Configure;
+use Symfony\Component\Dotenv\Dotenv;
+
+(new Dotenv())->bootEnv(ROOT . '/config/.env');
+Configure::write('debug', 0);
+",
+            HeaderFormatter::format($code),
         );
-        $this->assertSame([], HeaderFormatter::uses("<?php\nConfigure::write('debug', 0);\n"));
-        $this->assertSame([], HeaderFormatter::uses("<?php\nclass {\n"));
     }
 
     /**

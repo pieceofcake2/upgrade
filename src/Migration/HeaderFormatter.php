@@ -36,7 +36,7 @@ use PhpParser\ParserFactory;
  * Rector keeps the formatting of the statements that it does not change, so it prints the new namespace and use
  * statements wherever the old statements were, around the docblock of the file. The rest of the file stays as it is.
  * A file without a namespace (`config/core.php`) is only changed when it starts with use statements. The use
- * statements that the file had before Rector stay first, as Rector adds the new ones before them.
+ * statements are sorted, as the CakePHP coding standard expects (see UseOrder).
  */
 final class HeaderFormatter
 {
@@ -44,10 +44,9 @@ final class HeaderFormatter
      * Orders the beginning of the code
      *
      * @param string $code The code of a file with one namespace without braces
-     * @param array<string> $original The use statements that go first, as `uses()` returns them
      * @return string The code
      */
-    public static function format(string $code, array $original = []): string
+    public static function format(string $code): string
     {
         if (!str_starts_with($code, '<?php')) {
             return $code;
@@ -67,22 +66,23 @@ final class HeaderFormatter
             $docComments[] = array_shift($comments);
         }
         // A comment keeps the indentation of its first line, as in config/routes.php of CakePHP 2
-        $docs = array_map(static function (Comment $comment) use ($code): string {
+        $indent = static function (Comment $comment) use ($code): string {
             $start = $comment->getStartFilePos();
             $lineStart = strrpos(substr($code, 0, $start), "\n");
             $indent = substr($code, $lineStart === false ? 0 : $lineStart + 1, $start - ($lineStart === false ? 0 : $lineStart + 1));
 
-            return (trim($indent) === '' ? $indent : '') . $comment->getText();
-        }, $docComments);
+            return trim($indent) === '' ? $indent : '';
+        };
+        $docs = array_map(static fn(Comment $comment): string => $indent($comment) . $comment->getText(), $docComments);
         $restStart = $comments !== [] ? $comments[0]->getStartFilePos() : $first->getStartFilePos();
         $lineStart = strrpos(substr($code, 0, $restStart), "\n");
         $rest = substr($code, $lineStart === false ? $restStart : $lineStart + 1);
 
         $eol = str_contains($code, "\r\n") ? "\r\n" : "\n";
         $text = static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1);
-        $useTexts = array_map($text, $uses);
-        $kept = array_values(array_intersect($original, $useTexts));
-        $useTexts = array_merge($kept, array_values(array_diff($useTexts, $kept)));
+        // The use statements get the indentation of the docblock of the file, as config/routes.php of pieceofcake2/app
+        $useIndent = $docComments !== [] ? $indent($docComments[0]) : '';
+        $useTexts = UseOrder::sort(array_map(static fn(Node\Stmt $use): array => [$use, $useIndent . $text($use)], $uses));
         $blocks = array_filter([
             implode($eol, $docs),
             implode($eol, array_map($text, $declares)),
@@ -91,27 +91,6 @@ final class HeaderFormatter
         ], static fn(string $block): bool => $block !== '');
 
         return '<?php' . $eol . ($docs === [] ? $eol : '') . implode($eol . $eol, $blocks) . $eol . $eol . $rest;
-    }
-
-    /**
-     * The use statements of the beginning of a file, as written
-     *
-     * @param string $code The code
-     * @return array<string>
-     */
-    public static function uses(string $code): array
-    {
-        try {
-            $stmts = (new ParserFactory())->createForNewestSupportedVersion()->parse($code) ?? [];
-        } catch (Error) {
-            return [];
-        }
-        $head = self::head($stmts);
-        if ($head === null) {
-            return [];
-        }
-
-        return array_map(static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1), $head[2]);
     }
 
     /**

@@ -16,10 +16,10 @@
  * @license       https://opensource.org/licenses/mit-license.php MIT License
  */
 
-use Composer\InstalledVersions;
 use Cake\Core\Configure;
 use Cake\Error\NotFoundException;
 use Cake\TestSuite\CakeTestSuiteDispatcher;
+use Composer\InstalledVersions;
 
 set_time_limit(0);
 ini_set('display_errors', 1);

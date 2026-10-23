@@ -16,10 +16,10 @@
  * @license       https://opensource.org/licenses/mit-license.php MIT License
  */
 
-use Composer\InstalledVersions;
-use Cake\Routing\Dispatcher;
 use Cake\Network\CakeRequest;
 use Cake\Network\CakeResponse;
+use Cake\Routing\Dispatcher;
+use Composer\InstalledVersions;
 
 if (!defined('DS')) {
     define('DS', DIRECTORY_SEPARATOR);

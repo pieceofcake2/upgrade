@@ -393,10 +393,9 @@ Then it changes the code with Rector:
 - `config/`, the entry files (`bin/cake`, the PHP files of `webroot/`) and the templates stay without a namespace,
   and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
   `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
-  class names of the settings. The use statements go after the docblock of the file, and after its own use statements
-  (`use Symfony\Component\Dotenv\Dotenv;` of `config/core.php`), which stay first.
-- A template gets the use statements at the top, as in the templates of CakePHP 5: in its first block of PHP when it
-  starts with one (after the docblock), else in a new block:
+  class names of the settings. The use statements go after the docblock of the file, between blank lines.
+- A template gets the use statements at the top, as in the templates of pieceofcake2/app: in its first block of PHP
+  when it starts with one (after the docblock), else in a new block:
 
   ```php
   <?php
@@ -410,6 +409,9 @@ Then it changes the code with Rector:
 
   A template that names no class does not change, and the docblocks of the templates keep their names
   (`@var View $this`).
+- In every file that the command changes, the `use` statements are sorted as the CakePHP coding standard expects
+  (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`), with the use statements that the file had: by name,
+  part by part and without case, the classes before the functions and the constants.
 
 And the configuration:
 
@@ -436,7 +438,6 @@ What `namespace` does not change, as the command lists it or as you check it:
   the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `paginate()`,
   which CakePHP reads as a model alias).
 - Data with the old class names: serialized objects in caches and sessions. Clear the caches.
-- The order of the `use` statements: run your code style fixer.
 
 Run `composer dump-autoload` and your tests afterwards, and review the changes with `git diff`.
 

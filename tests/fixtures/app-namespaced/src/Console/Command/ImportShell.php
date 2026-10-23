@@ -2,8 +2,8 @@
 
 namespace App\Console\Command;
 
-use Cake\Console\Command\Task\ExtractTask;
 use App\Console\Command\Task\DownloadTask;
+use Cake\Console\Command\Task\ExtractTask;
 
 class ImportShell extends AppShell
 {

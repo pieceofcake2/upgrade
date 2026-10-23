@@ -29,8 +29,8 @@ use PhpParser\ParserFactory;
  * HTML for PHP), with `use` statements: `\Cake\Core\Configure::read('debug')` or `Configure::read('debug')` becomes
  * `Configure::read('debug')` with `use Cake\Core\Configure;`.
  *
- * The use statements go at the top, as in the templates of CakePHP 5: in the first block of PHP when the file starts
- * with one (after its docblock, or after its use statements), else in a new block:
+ * The use statements go at the top, sorted, as in the templates of pieceofcake2/app: in the first block of PHP when
+ * the file starts with one (after its docblock, between blank lines, or with its use statements), else in a new block:
  *
  * ```
  * <?php
@@ -76,7 +76,7 @@ final class NameImporter
             }
             [$short, $added] = $class;
             if ($added !== null) {
-                $new[strtolower($added)] = 'use ' . $added . ';';
+                $new[strtolower($added)] = $added;
             }
             $edits[] = [$name->getStartFilePos(), $name->getEndFilePos() + 1, $short];
         }
@@ -215,61 +215,54 @@ final class NameImporter
     }
 
     /**
-     * The edit that adds the use statements at the top of the file
+     * The edit that adds the use statements at the top of the file, sorted with the use statements of the file there
      *
      * @param string $code The code
      * @param array<\PhpParser\Node\Stmt> $stmts The statements
-     * @param array<string> $uses The use statements
+     * @param array<string> $classes The classes to import
      * @return array{int, int, string} The start and the end of the replaced text, and the new text
      */
-    private static function useBlock(string $code, array $stmts, array $uses): array
+    private static function useBlock(string $code, array $stmts, array $classes): array
     {
         $eol = str_contains($code, "\r\n") ? "\r\n" : "\n";
-        $lines = implode($eol, $uses);
+        $new = array_map(static fn(string $class): array => [new Use_([new Node\UseItem(new Name($class))]), 'use ' . $class . ';'], $classes);
         $offset = 0;
         if (isset($stmts[0]) && $stmts[0] instanceof InlineHTML && str_starts_with($code, '#!')) {
             $offset = (int)strpos($code, "\n") + 1;
             array_shift($stmts);
         }
         if (!preg_match('/\G<\?php\r?\n/', $code, $match, 0, $offset)) {
-            return [$offset, $offset, '<?php' . $eol . $lines . $eol . '?>' . $eol];
+            return [$offset, $offset, '<?php' . $eol . implode($eol, UseOrder::sort($new)) . $eol . '?>' . $eol];
         }
 
         $start = $offset + 5;
-        $before = $eol;
         $first = null;
-        $last = null;
+        $existing = [];
         foreach ($stmts as $stmt) {
             if ($stmt instanceof Declare_ && $stmt->stmts === null && $first === null) {
                 $start = $stmt->getEndFilePos() + 1;
-                $before = $eol . $eol;
                 continue;
             }
-            if ($stmt instanceof Use_ || $stmt instanceof GroupUse) {
+            if (($stmt instanceof Use_ || $stmt instanceof GroupUse) && ($existing === [] || $stmt->getComments() === [])) {
                 $first ??= $stmt;
-                $last = $stmt;
+                $existing[] = [$stmt, substr($code, $stmt->getStartFilePos(), $stmt->getEndFilePos() - $stmt->getStartFilePos() + 1)];
                 continue;
             }
             $first ??= $stmt;
             break;
         }
-        if ($last !== null) {
-            $end = $last->getEndFilePos() + 1;
+        if ($existing !== []) {
+            $useStart = $existing[0][0]->getStartFilePos();
+            $useEnd = end($existing)[0]->getEndFilePos() + 1;
 
-            return [$end, $end, $eol . $lines];
+            return [$useStart, $useEnd, implode($eol, UseOrder::sort(array_merge($existing, $new)))];
         }
         $comments = $first instanceof Stmt ? $first->getComments() : [];
         if ($comments !== [] && $comments[0] instanceof Doc) {
             $start = $comments[0]->getEndFilePos() + 1;
-            $before = null;
         }
         $length = strspn($code, " \t\r\n", $start);
-        $gap = substr($code, $start, $length);
-        if ($before === null) {
-            $before = substr_count($gap, "\n") > 1 ? $eol . $eol : $eol;
-        }
-        $after = substr($code, $start + $length, 2) === '?>' ? $eol : $eol . $eol;
 
-        return [$start, $start + $length, $before . $lines . $after];
+        return [$start, $start + $length, $eol . $eol . implode($eol, UseOrder::sort($new)) . $eol . $eol];
     }
 }

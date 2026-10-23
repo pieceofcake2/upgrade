@@ -25,6 +25,9 @@
   CakePHP 5; a template that names no class does not change. `layout` still creates the entry files with the global
   names, which work in a global application
   ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
+- `namespace` sorts the `use` statements of the files that it changes, with the ones that the files had, as the
+  CakePHP coding standard expects (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`)
+  ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - New `class-name-strings` rules: the class names in the settings that name a class (`$components`, `$helpers`,
   `$uses`, the associations, engines, handlers, `Dispatcher.filters`, `viewClassMap`, `Components->load()`,
   `Helpers->load()`, `Behaviors->load()`, `loadModel()`, ...) become `::class`. `--no-short-names` keeps the short

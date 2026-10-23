@@ -2,8 +2,8 @@
 
 namespace App\Model;
 
-use Cake\Model\Model;
 use Cake\Model\Behavior\ContainableBehavior;
+use Cake\Model\Model;
 
 class AppModel extends Model
 {
