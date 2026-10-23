@@ -28,6 +28,14 @@
 - `namespace` sorts the `use` statements of the files that it changes, with the ones that the files had, as the
   CakePHP coding standard expects (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`)
   ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
+- `layout` also moves an application without `app/`, whose root is the directory `app/` of CakePHP 2 (`Config/`,
+  `Controller/`, `View/`, `webroot/`, ... in the root), with directories that may be lowercase already. It tells it
+  apart from a plugin and from the new layout, keeps `webroot/`, `tmp/` and the `vendor/` of Composer, moves
+  `Plugin/` to `plugins/` with `extra.installer-paths` for the plugins that Composer installs, replaces the old
+  `webroot/index.php` and `webroot/test.php` when Git has them, and keeps the entry files that the application already
+  has in the new style, with the paths of the moved directories updated. The constants of the old entry files that
+  are built on the paths of the old layout or defined under a condition are listed instead of copied
+  ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - `namespace` no longer asks to update `autoload.psr-4: src/` by hand when it moves `src/Lib/<Type>/` to
   `src/<Type>/` ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - New `class-name-strings` rules: the class names in the settings that name a class (`$components`, `$helpers`,

@@ -1,0 +1,17 @@
+#!/usr/bin/env php
+<?php
+/**
+ * The console of the application, with the autoloader of Composer
+ */
+if (!defined('DS')) {
+    define('DS', DIRECTORY_SEPARATOR);
+}
+// AWS Lambda can only write to /tmp
+if (getenv('LAMBDA_TASK_ROOT') !== false) {
+    define('TMP', '/tmp/');
+    define('LOGS', '/tmp/logs/');
+}
+require_once dirname(__DIR__) . DS . 'Config' . DS . 'define.php';
+require_once dirname(__DIR__) . DS . 'vendor' . DS . 'autoload.php';
+
+ShellDispatcher::run($argv);

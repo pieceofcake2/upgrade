@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# The console of the CakePHP 2 layout, run from the application directory
+LIB=$(cd -P -- "$(dirname -- "$0")" && pwd -P) && LIB=$LIB/ && APP=`pwd`
+exec php -q "$LIB"cake.php -working "$APP" "$@"

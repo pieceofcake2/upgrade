@@ -115,7 +115,12 @@ final class NamespacePlan
     public static function legacyLayout(string $root, bool $plugin): ?string
     {
         if (!$plugin) {
-            return Paths::hasDirectory($root, 'app') && Paths::hasDirectory($root . DIRECTORY_SEPARATOR . 'app', 'Config') ? 'app/Config/' : null;
+            return match (true) {
+                LayoutPlan::detect($root) === LayoutPlan::APP_DIRECTORY => 'app/Config/',
+                Paths::hasDirectory($root, 'Config') => 'Config/',
+                LayoutPlan::detect($root) === LayoutPlan::ROOT_APP => 'Controller/',
+                default => null,
+            };
         }
         foreach (['Config', 'Locale', 'Test'] as $dir) {
             if (Paths::hasDirectory($root, $dir)) {

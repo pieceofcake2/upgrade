@@ -84,7 +84,7 @@ bin/cake upgrade locations
 | `components` | コンポーネントが `Component` クラスを継承するようにします。 |
 | `exceptions` | `cakeError()` の呼び出しを例外に置き換えます。 |
 | `rector` | pieceofcake2/cakephp の変更のための Rector のルールを適用します。`all` には含まれません。[Rector のルール](#rector-rules) を参照してください。 |
-| `layout` | アプリケーションを CakePHP 2 の構成 (`app/Config/`、`app/Controller/` など) から pieceofcake2/app の構成 (`config/`、`src/`、`templates/` など) に移します。プラグインでは設定・テンプレート・翻訳・テストを移します。`all` には含まれません。[構成と名前空間](#layout-and-namespace) を参照してください。 |
+| `layout` | アプリケーションを CakePHP 2 の構成 (`app/Config/`、`app/Controller/` など。ルートに `Config/`、`Controller/` などがある構成も含みます) から pieceofcake2/app の構成 (`config/`、`src/`、`templates/` など) に移します。プラグインでは設定・テンプレート・翻訳・テストを移します。`all` には含まれません。[構成と名前空間](#layout-and-namespace) を参照してください。 |
 | `namespace` | アプリケーションやプラグインのクラスを名前空間 (`App\`、またはプラグイン名) に移し、`App.namespace` と PSR-4 を設定します。`all` には含まれません。[構成と名前空間](#layout-and-namespace) を参照してください。 |
 
 <a id="options"></a>
@@ -283,6 +283,7 @@ bin/cake upgrade rector --rules class-name-strings src tests config
 
 ```bash
 # 1. CakePHP 2 の構成 (app/Config/、app/Controller/、app/View/ など) を config/、src/、templates/ などに移す
+#    (app/ がない場合は Console/cake upgrade layout)
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
 composer dump-autoload
@@ -293,7 +294,8 @@ bin/cake upgrade namespace
 composer dump-autoload
 ```
 
-プロジェクトのルート (`app/` か `config/` があるディレクトリ) で実行してください。Git リポジトリでは、Git が
+プロジェクトのルート (`app/` か `config/` があるディレクトリ。`app/` がないアプリケーションでは `Config/` と
+`Controller/` があるディレクトリ) で実行してください。Git リポジトリでは、Git が
 履歴を保てるように `git mv` でファイルを移します。Git リポジトリでなければ `rename()` で移し、その旨を表示します。
 ファイルを上書きすることはありません。移動先にファイルがあれば移動を飛ばし、一覧で表示します。`--dry-run` を
 付けると、何も変更せずに移動の一覧を表示し、`namespace` では変更の内容を diff で表示します。
@@ -335,11 +337,48 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
   アプリケーション独自の定数 (例: `define('SITE_NAME', 'Blog')`) は、すべてのエントリーファイルが読み込む新しい
   `config/define.php` に追加します。CakePHP 2 の定数 (`ROOT`、`APP_DIR`、`WEBROOT_DIR`、`WWW_ROOT`、
   `CAKE_CORE_INCLUDE_PATH` など) は追加しません。新しいファイルが新しい構成に合わせて定義し、コアは Composer が
-  読み込むからです。古いファイルのパス (`__FILE__`、`__DIR__`) から作る定数は、`ROOT` から定義し直せるよう一覧で
-  表示します。
+  読み込むからです。古いファイルのパス (`__FILE__`、`__DIR__`) や古い構成のパス (`APP`、`APP_DIR`、
+  `CAKE_CORE_INCLUDE_PATH`) から作る定数と、`if (!defined(...))` 以外の条件の中で定義する定数は、手で定義し直せるよう
+  一覧で表示します。
 - Git リポジトリでは、古いエントリーファイル (`app/webroot/index.php`、`app/webroot/test.php`、`app/Console/cake`、
   `cake.php`、`cake.bat`) を `git rm` で削除します。Git の履歴には残ります。コミットしていない変更があるファイルは
   Git が削除を拒むので、そのまま残ります。Git リポジトリでなければ、比べてから削除できるように残します。
+- アプリケーションにすでにあるエントリーファイルはそのまま残し、確認できるよう一覧で表示します。
+
+`app/` がなく、CakePHP 2 の `app/` ディレクトリそのものがプロジェクトのルートになっているアプリケーション
+(`composer.json` と同じ階層に `Config/`、`Controller/`、`View/`、`webroot/` などがある構成) も、ルートを起点に
+同じように移します。`Config/` は `config/` に、`Controller/` は `src/Controller/` に、`View/` のテンプレートは
+`templates/` に、`Locale/` は `resources/locales/` に、`Test/` は `tests/` に、`Plugin/` は `plugins/` に、
+`Vendor/` は `vendors/` に、`tmp/logs/` は `logs/` に移ります。`webroot/` と `tmp/` はそのままです。
+
+- 構成は、ファイル名を大文字と小文字を区別して見分けます。`app/Config/` があれば CakePHP 2 の構成です。
+  `Config/core.php` か `config/core.php` があり、`Controller/` と `webroot/index.php` もあれば、`app/` のない
+  アプリケーションです。`composer.json` に `"type": "cakephp-plugin"` があるディレクトリや、`Config/`、
+  `Controller/`、`View/` などがあっても `core.php` がないディレクトリはプラグインなので、アプリケーションから
+  `--plugin` を付けて実行してください。それ以外で `config/` があれば新しい構成です。
+- すでに小文字になっているディレクトリ (`config/` など) はそのままです。大文字と小文字だけが変わる名前の変更
+  (`Config/` から `config/`) は、macOS のように大文字と小文字を区別しないファイルシステムでも行え、Git にも記録
+  されます。小文字の `vendor/` は Composer のディレクトリなので移しません。`Vendor/` は、`composer.json` の
+  `vendor-dir` でなければ `vendors/` に移します。
+- `Plugin/` は、Composer がインストールしたプラグインも含めて `plugins/` に移します。composer/installers は
+  CakePHP 2 のプラグインを `Plugin/` にインストールするので、pieceofcake2/app と同じように `composer.json` に
+  `"installer-paths": {"plugins/{$name}/": ["type:cakephp-plugin"]}` を追加します。`type:cakephp-plugin` の
+  パスがすでに設定されていれば追加せず、`Plugin/{$name}/` を `plugins/{$name}/` に書き換えます。そのあとで
+  `composer install` を実行してください。
+- 古い `webroot/index.php` と `webroot/test.php` (`APP_DIR` か `CAKE_CORE_INCLUDE_PATH` を定義し、`define.php`
+  を読み込まないもの) は、新しいファイルと同じ場所にあります。Git がその内容を持っている (追跡されていて、
+  変更がコミット済みの) 場合は新しいファイルに置き換え、そうでなければ残して一覧で表示します。`Console/cake`、
+  `cake.php`、`cake.bat` は上と同じように削除します。
+- アプリケーションがすでに持っている pieceofcake2/app 形式のエントリーファイル (`define.php` を読み込む
+  `bin/cake` や `webroot/index.php`、`Config/define.php`) は、AWS Lambda 向けの設定などの独自のコードを残します。
+  変えるのは文字列の中の移動したディレクトリのパスだけです。たとえば
+  `dirname(__DIR__) . DS . 'Config' . DS . 'define.php'` は
+  `dirname(__DIR__) . DS . 'config' . DS . 'define.php'` になります。残した `config/define.php` は
+  pieceofcake2/app のものと比べて表示します。`ROOT` と `APP_DIR` は古い構成のパスになっていて、新しいエントリー
+  ファイルには `ROOT`、`APP_DIR`、`WEBROOT_DIR`、`WWW_ROOT`、`VENDORS` が必要だからです。
+- 古いエントリーファイルで `ROOT` (アプリケーションの親ディレクトリでした) から作る定数も一覧で表示します。
+- ルートにある `index.php` と `.htaccess` は `webroot/` につなぐファイルなので、そのまま残します。Web サーバーの
+  ドキュメントルートを `webroot/` にしてから削除してください。
 
 プラグインの `src/` には名前空間付きのクラスだけを置くので、プラグインのクラスはこの段階では移しません
 (`namespace` で `src/` に移ります)。`Config/` は `config/` に、`View/` のテンプレートは `templates/` に、
@@ -361,20 +400,22 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
 コマンドが一覧で示す、手で行う作業は次のとおりです。
 
 - 古いエントリーファイルに定数以外の独自のコードがあれば、新しいファイルと比べて移してください。
+- `tmp/cache/` のキャッシュファイルを削除してください。古い構成のパスが入っています。`Plugin/` を `plugins/` に
+  移した場合は `composer install` を実行してください。
 - Web サーバーのドキュメントルートを `webroot/` にしてください。プロジェクトのルートにある、`app/webroot/` に
   つなぐ `index.php` や `.htaccess` は一覧で表示します。
 - 移動しないファイル: `app/index.php`、`app/.htaccess` など、`app/` に残るファイルです。`vendors/` の
   ライブラリは、パッケージがあれば Composer でインストールしてください。
 - `.thtml` のテンプレートを `.php` にした場合は、コントローラーやビューの `$ext = '.thtml'` を削除します。
 - コードの中のパス (`APP . 'Config' . DS`、`App::build()`)、Web サーバーの設定、`.gitignore` (`app/tmp/`)、
-  デプロイの設定にあるパスは変更しません。
+  デプロイの設定にあるパスは変更しません。`.gitignore` のうち、移動したパスを指す行は一覧で表示します。
 
 <a id="namespace"></a>
 
 ### `namespace`
 
-`namespace` は pieceofcake2/app の構成を前提とします。CakePHP 2 の構成 (`app/Config/`、プラグインでは
-`Config/`、`Locale/`、`Test/`、`View/` のテンプレート) が見つかると、何も変更せずに止まり、先に `layout` を
+`namespace` は pieceofcake2/app の構成を前提とします。CakePHP 2 の構成 (`app/Config/`、ルートの `Config/` や
+`Controller/`、プラグインでは `Config/`、`Locale/`、`Test/`、`View/` のテンプレート) が見つかると、何も変更せずに止まり、先に `layout` を
 実行するよう表示します。変更したコードには pieceofcake2/cakephp 2.13 以降が必要です。
 
 まず、ファイルを移します。

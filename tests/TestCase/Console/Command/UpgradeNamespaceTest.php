@@ -43,6 +43,24 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
     }
 
     /**
+     * An application that `layout` moved from the CakePHP 2 layout without `app/` becomes
+     * `tests/fixtures/root-app-namespaced`, with the use statements of the entry files that it kept (`bin/cake`)
+     *
+     * @return void
+     */
+    public function testRootApplication(): void
+    {
+        $app = $this->_copy('root-app', 'app');
+
+        $this->_run($app, ['namespace']);
+
+        $this->_assertSameTree($this->_fixture('root-app-namespaced'), $app);
+        $this->assertStringContainsString("\n */\n\nuse Cake\\Console\\ShellDispatcher;\n\nif (!defined('DS')) {\n", (string)file_get_contents($app . '/bin/cake'));
+        $this->assertStringNotContainsString('by hand', $this->out->output);
+        $this->assertSame([], $this->_errors);
+    }
+
+    /**
      * The classes of CakePHP get use statements in `config/`, the entry files and the templates that name them; the
      * code and the other templates stay as they are
      *
@@ -209,15 +227,25 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $plugins = $this->_copy('legacy-plugin', 'plugins');
         App::build(['Plugin' => [$plugins . DS]]);
 
+        $root = $this->_copy('legacy-root-app', 'root');
+        $mixed = $this->_copy('legacy-root-app', 'mixed');
+        rename($mixed . '/Config', $mixed . '/config.tmp');
+        rename($mixed . '/config.tmp', $mixed . '/config');
+
         $this->_run($app, ['namespace']);
         $this->_run($app, ['namespace', '--plugin', 'Blog']);
+        $this->_run($root, ['namespace']);
+        $this->_run($mixed, ['namespace']);
 
         $this->assertSame([
             'The application is in the CakePHP 2 layout (app/Config/): run bin/cake upgrade layout first.',
             'Blog is in the CakePHP 2 layout (Config/): run bin/cake upgrade layout --plugin Blog first.',
+            'The application is in the CakePHP 2 layout (Config/): run bin/cake upgrade layout first.',
+            'The application is in the CakePHP 2 layout (Controller/): run bin/cake upgrade layout first.',
         ], $this->_errors);
         $this->_assertSameTree($this->_fixture('legacy-app'), $app);
         $this->_assertSameTree($this->_fixture('legacy-plugin'), $plugins);
+        $this->_assertSameTree($this->_fixture('legacy-root-app'), $root);
     }
 
     /**
