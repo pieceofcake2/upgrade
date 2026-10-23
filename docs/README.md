@@ -420,6 +420,8 @@ The command moves the files:
   `Core`, `Error`, `Event`, `I18n`, `Log`, `Model`, `Network`, `Routing`, `TestSuite`, `Utility`, `View`): namespaced
   code has no `Lib`, so `src/Lib/Error/AppExceptionRenderer.php` becomes `App\Error\AppExceptionRenderer` in
   `src/Error/`. A file directly in `src/Lib/` stays, e.g. `App\Lib\MyTool`.
+- `src/Lib/` is then removed when it holds nothing but placeholder files (`empty`, `.gitkeep`), with `git rm` in a
+  Git repository, as in the skeleton of pieceofcake2/app. It stays with any other file.
 - A copy of a class of CakePHP in an application (a core class override, e.g. `src/Lib/Routing/Dispatcher.php`)
   moves to `src/Cake/<path>` (`src/Cake/Routing/Dispatcher.php`), keeps the namespace of CakePHP
   (`Cake\Routing`) and gets its `class_alias()`, as the files of CakePHP have. Compare it with the current file of

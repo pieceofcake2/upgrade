@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## Unreleased
+
+- `namespace` removes `src/Lib/` (and `Lib/` of a plugin) after the moves to `src/<Type>/` when it holds nothing but
+  placeholder files (`empty`, `.gitkeep`), with `git rm` in a Git repository, as namespaced code has no `Lib`. It
+  stays with any other file, e.g. `src/Lib/Foo.php` (`App\Lib\Foo`)
+  ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
+
 ## v1.1.0 (2026-10-23)
 
 - New `rector` command, which runs the Rector rules of the plugin for a change of pieceofcake2/cakephp: the sets

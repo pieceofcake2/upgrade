@@ -39,6 +39,8 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('autoload.psr-4: App\ => src/', $output);
         $this->assertStringContainsString('autoload-dev.psr-4: App\Test\ => tests/', $output);
         $this->assertStringContainsString('autoload.exclude-from-classmap: vendor/pieceofcake2/cakephp/src/Routing/Dispatcher.php', $output);
+        // src/Lib/ keeps its placeholder file with MyTool.php
+        $this->assertStringNotContainsString('Remove src/Lib/', $output);
         $this->assertSame([], $this->_errors);
     }
 
@@ -57,7 +59,26 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->_assertSameTree($this->_fixture('root-app-namespaced'), $app);
         $this->assertStringContainsString("\n */\n\nuse Cake\\Console\\ShellDispatcher;\n\nif (!defined('DS')) {\n", (string)file_get_contents($app . '/bin/cake'));
         $this->assertStringNotContainsString('by hand', $this->out->output);
+        // src/Lib/ held only src/Lib/Utility/ and a placeholder file
+        $this->assertStringContainsString('Remove src/Lib/, which holds no classes, only placeholder files', $this->out->output);
         $this->assertSame([], $this->_errors);
+    }
+
+    /**
+     * In a Git repository, the placeholder file of `src/Lib/` is removed with git rm
+     *
+     * @return void
+     */
+    public function testRemoveLibWithGit(): void
+    {
+        $app = $this->_copy('root-app', 'app');
+        $this->_commit($app);
+
+        $this->_run($app, ['namespace']);
+
+        $this->assertDirectoryDoesNotExist($app . '/src/Lib');
+        exec('git -C ' . escapeshellarg($app) . ' status --porcelain -- src/Lib', $status);
+        $this->assertContains('D  src/Lib/empty', $status);
     }
 
     /**

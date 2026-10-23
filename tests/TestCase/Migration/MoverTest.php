@@ -132,6 +132,55 @@ class MoverTest extends CakeTestCase
     }
 
     /**
+     * A directory with nothing but placeholder files is removed; one with another file stays as it is
+     *
+     * @return void
+     */
+    public function testRemovePlaceholderDirectory(): void
+    {
+        $this->_write('src/Lib/empty');
+        $this->_write('src/Lib/Error/.gitkeep');
+        $this->_write('plugins/Lib/empty');
+        $this->_write('plugins/Lib/Foo.php', 'foo');
+        $mover = new Mover($this->_root);
+
+        $this->assertTrue($mover->removePlaceholderDirectory($this->_root . '/src/Lib'));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/plugins/Lib'));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/missing'));
+
+        $this->assertDirectoryDoesNotExist($this->_root . '/src/Lib');
+        $this->assertDirectoryExists($this->_root . '/src');
+        $this->assertFileExists($this->_root . '/plugins/Lib/empty');
+        $this->assertFileExists($this->_root . '/plugins/Lib/Foo.php');
+    }
+
+    /**
+     * In a Git repository, the placeholder files are removed with git rm, also an empty one that is only added; a
+     * placeholder file with contents that are not committed stays
+     *
+     * @return void
+     */
+    public function testRemovePlaceholderDirectoryWithGit(): void
+    {
+        exec('git -C ' . escapeshellarg($this->_root) . ' init -q 2>&1', $output, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('git is not available');
+        }
+        $this->_write('src/Lib/empty');
+        $this->_write('src/Lib/Error/.gitkeep');
+        $this->_write('plugins/Lib/.gitkeep', 'keep');
+        exec('git -C ' . escapeshellarg($this->_root) . ' add -A');
+        $mover = new Mover($this->_root);
+
+        $this->assertTrue($mover->removePlaceholderDirectory($this->_root . '/src/Lib'));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/plugins/Lib'));
+
+        exec('git -C ' . escapeshellarg($this->_root) . ' ls-files', $files);
+        $this->assertSame(['plugins/Lib/.gitkeep'], $files);
+        $this->assertDirectoryDoesNotExist($this->_root . '/src/Lib');
+    }
+
+    /**
      * In a Git repository, a tracked file moves with git mv, an untracked one with rename()
      *
      * @return void

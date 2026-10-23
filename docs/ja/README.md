@@ -441,6 +441,8 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
   名前空間付きのコードには `Lib` がないので、`src/Lib/Error/AppExceptionRenderer.php` は `src/Error/` の
   `App\Error\AppExceptionRenderer` になります。`src/Lib/` の直下のファイルはそのまま残ります
   (例: `App\Lib\MyTool`)。
+- その後、`src/Lib/` にプレースホルダーのファイル (`empty`、`.gitkeep`) しか残っていなければ、pieceofcake2/app の
+  スケルトンと同じように `src/Lib/` を削除します (Git リポジトリでは `git rm`)。ほかのファイルがあれば残します。
 - アプリケーションにある CakePHP のクラスのコピー (コアクラスの上書き。例: `src/Lib/Routing/Dispatcher.php`) は
   `src/Cake/<path>` (`src/Cake/Routing/Dispatcher.php`) に移し、CakePHP の名前空間 (`Cake\Routing`) のまま、
   CakePHP のファイルと同じように `class_alias()` を付けます。古いバージョンのコピーかもしれないので、今の

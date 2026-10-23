@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace PieceOfCake2\Upgrade\Migration;
 
 use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 
 /**
  * Moves files and directories, with `git mv` in a Git repository so that Git keeps their history, else with
@@ -15,6 +17,13 @@ use FilesystemIterator;
  */
 final class Mover
 {
+    /**
+     * The names of the files that only keep a directory in Git
+     *
+     * @var array<string>
+     */
+    public const PLACEHOLDERS = ['empty', '.gitkeep'];
+
     /**
      * Whether the root is in a Git repository, once checked
      *
@@ -122,17 +131,18 @@ final class Mover
 
     /**
      * Removes a file with `git rm`, if Git tracks it. Git refuses to remove a file with changes that it has not
-     * committed, so they are never lost.
+     * committed, so they are never lost, unless the removal is forced.
      *
      * @param string $path The absolute path
+     * @param bool $force Whether to remove it also with changes that are not committed
      * @return bool Whether it was removed
      */
-    public function remove(string $path): bool
+    public function remove(string $path, bool $force = false): bool
     {
         if (!$this->canRemove($path)) {
             return false;
         }
-        exec(sprintf('git -C %s rm -q -- %s 2>&1', escapeshellarg($this->root), escapeshellarg($path)), $output, $code);
+        exec(sprintf('git -C %s rm -q %s-- %s 2>&1', escapeshellarg($this->root), $force ? '-f ' : '', escapeshellarg($path)), $output, $code);
 
         return $code === 0;
     }
@@ -156,6 +166,42 @@ final class Mover
         if ((new FilesystemIterator($dir))->valid() === false) {
             rmdir($dir);
         }
+    }
+
+    /**
+     * Removes a directory that holds nothing but placeholder files (`empty`, `.gitkeep`), which keep empty
+     * directories in Git, with `git rm` for the tracked ones, also when an empty one is not committed yet. A
+     * directory with any other file stays as it is.
+     *
+     * @param string $dir The directory
+     * @return bool Whether it was removed
+     */
+    public function removePlaceholderDirectory(string $dir): bool
+    {
+        if (!is_dir($dir) || is_link($dir)) {
+            return false;
+        }
+        $placeholders = [];
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $file) {
+            if ($file->isLink() || !in_array($file->getFilename(), self::PLACEHOLDERS, true)) {
+                return false;
+            }
+            $placeholders[] = $file->getPathname();
+        }
+        foreach ($placeholders as $file) {
+            if ($this->canRemove($file)) {
+                // An empty file has no contents to lose
+                if (!$this->remove($file, filesize($file) === 0)) {
+                    return false;
+                }
+            } elseif (is_file($file)) {
+                unlink($file);
+            }
+        }
+        $this->removeEmpty($dir);
+
+        return !is_dir($dir);
     }
 
     /**

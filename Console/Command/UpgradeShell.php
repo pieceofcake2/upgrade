@@ -546,9 +546,7 @@ class UpgradeShell extends AppShell
             $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
             $mover->move($from, $to);
         }
-        foreach (['src' . DS . 'Lib', 'Lib'] as $dir) {
-            $mover->removeEmpty($work . DS . $dir);
-        }
+        $this->_removeLib($plan, $mover);
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
         $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
 
@@ -583,6 +581,29 @@ class UpgradeShell extends AppShell
         }
 
         return $code;
+    }
+
+    /**
+     * Removes `src/Lib/` (and `Lib/` of a plugin) after the moves to `src/<Type>/`, when it holds nothing but
+     * placeholder files (`empty`, `.gitkeep`): namespaced code has no `Lib`. It stays with any other file, e.g.
+     * `src/Lib/Foo.php` (App\Lib\Foo).
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Removes the files
+     * @return void
+     */
+    protected function _removeLib(NamespacePlan $plan, Mover $mover)
+    {
+        foreach (['src/Lib', 'Lib'] as $dir) {
+            $path = $plan->root . DS . str_replace('/', DS, $dir);
+            if (!Paths::hasDirectory(dirname($path), basename($path))) {
+                continue;
+            }
+            $mover->removeEmpty($path);
+            if (is_dir($path) && $mover->removePlaceholderDirectory($path)) {
+                $this->out(__d('cake_console', 'Remove %s/, which holds no classes, only placeholder files', $dir));
+            }
+        }
     }
 
     /**
