@@ -28,6 +28,8 @@
 - `namespace` sorts the `use` statements of the files that it changes, with the ones that the files had, as the
   CakePHP coding standard expects (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`)
   ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
+- `namespace` no longer asks to update `autoload.psr-4: src/` by hand when it moves `src/Lib/<Type>/` to
+  `src/<Type>/` ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - New `class-name-strings` rules: the class names in the settings that name a class (`$components`, `$helpers`,
   `$uses`, the associations, engines, handlers, `Dispatcher.filters`, `viewClassMap`, `Components->load()`,
   `Helpers->load()`, `Behaviors->load()`, `loadModel()`, ...) become `::class`. `--no-short-names` keeps the short

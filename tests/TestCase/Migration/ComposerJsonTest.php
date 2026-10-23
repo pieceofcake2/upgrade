@@ -116,6 +116,7 @@ JSON, $composer->contents());
     "autoload": {
         "classmap": ["app/Controller/", "app/Model", "app/View/", "vendors/"],
         "psr-0": {"Legacy_": ["app/Lib/", "lib/"]},
+        "psr-4": {"App\\": "src/"},
         "files": ["app/Config/functions.php"]
     },
     "extra": {
@@ -135,6 +136,8 @@ JSON;
             'app/Lib' => 'src/Lib',
             'app/View/Helper' => 'src/View/Helper',
             'app/Plugin' => 'plugins',
+            // In src/, which stays the path of App\
+            'src/Lib/Utility' => 'src/Utility',
         ]);
 
         $this->assertSame([

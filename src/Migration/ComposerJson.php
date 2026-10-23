@@ -198,8 +198,9 @@ final class ComposerJson
                 return $new;
             }
         }
-        foreach (array_keys($moves) as $from) {
-            if (str_starts_with($from, $normalized . '/')) {
+        // A path that holds a moved directory, unless it also holds its new place (src/ for src/Lib/Utility/)
+        foreach ($moves as $from => $to) {
+            if (str_starts_with($from, $normalized . '/') && !str_starts_with($to, $normalized . '/')) {
                 $result[1][] = sprintf('%s: %s', $where, $path);
                 break;
             }
