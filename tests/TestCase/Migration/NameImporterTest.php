@@ -25,6 +25,9 @@ class NameImporterTest extends CakeTestCase
         'NotFoundException' => 'Cake\Error\NotFoundException',
         'ShellDispatcher' => 'Cake\Console\ShellDispatcher',
         'Slug' => 'App\Utility\Slug',
+        'AppView' => 'App\View\AppView',
+        'Post' => 'App\Model\Post',
+        'View' => 'Cake\View\View',
     ];
 
     /**
@@ -59,7 +62,7 @@ class NameImporterTest extends CakeTestCase
         $code = "<?php\n/**\n * @var \\Cake\\View\\View \$this\n */\nif (!\\Cake\\Core\\Configure::read('debug')):\n    throw new \\Cake\\Error\\NotFoundException();\nendif;\n?>\n<p><?php \\Cake\\Utility\\Debugger::checkSecurityKeys(); ?></p>\n";
 
         $this->assertSame(
-            "<?php\n/**\n * @var \\Cake\\View\\View \$this\n */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n<p><?php Debugger::checkSecurityKeys(); ?></p>\n",
+            "<?php\n/**\n * @var View \$this\n */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\nuse Cake\\View\\View;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n<p><?php Debugger::checkSecurityKeys(); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
 
@@ -89,6 +92,32 @@ class NameImporterTest extends CakeTestCase
             "<?php\nuse Cake\\Cache\\Cache;\nuse Cake\\Core\\Configure;\nuse Cake\\Utility\\Debugger;\n?>\n<p><?php echo Configure::read('a') . Debugger::trace() . Cache::read('b'); ?></p>\n",
             NameImporter::import($code, self::CLASSES),
         );
+    }
+
+    /**
+     * The class names of the docblocks are imported too, as in the templates of pieceofcake2/app, also in a template
+     * without other classes; other names of the docblocks stay
+     *
+     * @return void
+     */
+    public function testDocblocks(): void
+    {
+        $code = "<?php\n/**\n * @var View \$this\n * @var array<int, \\App\\Model\\Post>|null \$posts The posts\n * @var string \$title\n * @var Exception \$error\n */\n?>\n<h1><?php echo h(\$title); ?></h1>\n";
+
+        $this->assertSame(
+            "<?php\n/**\n * @var View \$this\n * @var array<int, Post>|null \$posts The posts\n * @var string \$title\n * @var Exception \$error\n */\n\nuse App\\Model\\Post;\nuse Cake\\View\\View;\n\n?>\n<h1><?php echo h(\$title); ?></h1>\n",
+            NameImporter::import($code, self::CLASSES),
+        );
+
+        $code = "<?php\n/**\n * @var \\App\\View\\AppView \$this\n * @see View::render() Configure\n */\n\n\$this->assign('title', 'Posts');\n?>\n<div></div>\n";
+        $this->assertSame(
+            "<?php\n/**\n * @var AppView \$this\n * @see View::render() Configure\n */\n\nuse App\\View\\AppView;\n\n\$this->assign('title', 'Posts');\n?>\n<div></div>\n",
+            NameImporter::import($code, self::CLASSES),
+        );
+
+        // A docblock name of a use statement names that class
+        $code = "<?php\nuse Acme\\View;\n\n/** @var View \$this */\n?>\n<div></div>\n";
+        $this->assertSame($code, NameImporter::import($code, self::CLASSES));
     }
 
     /**

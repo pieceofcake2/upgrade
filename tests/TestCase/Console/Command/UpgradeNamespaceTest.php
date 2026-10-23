@@ -55,13 +55,14 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->_run($app, ['namespace']);
 
         $file = static fn(string $path): string => (string)file_get_contents($app . DS . str_replace('/', DS, $path));
-        // A template with a class of CakePHP after its HTML, and one that starts with a block of PHP, whose docblock
-        // stays as it is
+        // A template with a class of CakePHP after its HTML, one that starts with a block of PHP, and one with a class
+        // in its docblock only
         $this->assertStringStartsWith("<?php\nuse Cake\\Core\\Configure;\n?>\n<h2><?php echo h(\$message); ?></h2>\n<?php\nif (Configure::read('debug') > 0):\n", $file('templates/Error/error400.php'));
         $this->assertStringStartsWith(
-            "<?php\n/**\n * The home page\n *\n * @var View \$this\n */\n\nuse App\\Utility\\Slug;\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n",
+            "<?php\n/**\n * The home page\n *\n * @var View \$this\n */\n\nuse App\\Utility\\Slug;\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\nuse Cake\\View\\View;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n",
             $file('templates/Pages/home.php'),
         );
+        $this->assertStringStartsWith("<?php\n/**\n * @var AppView \$this\n */\n\nuse App\\View\\AppView;\n\n?>\n<nav>", $file('templates/element/menu.php'));
         // Templates without classes
         foreach (['templates/Posts/view.php', 'templates/layout/default.php', 'templates/Scaffolds/index.ctp'] as $template) {
             $this->assertFileEquals($this->_fixture('app/' . $template), $app . DS . $template, $template);

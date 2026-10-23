@@ -9,6 +9,7 @@ use App\Utility\Slug;
 use Cake\Core\Configure;
 use Cake\Error\NotFoundException;
 use Cake\Utility\Debugger;
+use Cake\View\View;
 
 if (!Configure::read('debug')):
     throw new NotFoundException();

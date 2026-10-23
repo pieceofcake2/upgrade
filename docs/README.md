@@ -394,8 +394,9 @@ Then it changes the code with Rector:
   and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
   `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
   class names of the settings. The use statements go after the docblock of the file, between blank lines.
-- A template gets the use statements at the top, as in the templates of pieceofcake2/app: in its first block of PHP
-  when it starts with one (after the docblock), else in a new block:
+- A template gets the use statements at the top, as in the templates of pieceofcake2/app, also for the classes of its
+  docblocks (`use Cake\View\View;` for `@var View $this`): in its first block of PHP when it starts with one (after
+  the docblock), else in a new block:
 
   ```php
   <?php
@@ -407,8 +408,8 @@ Then it changes the code with Rector:
   <?php endif; ?>
   ```
 
-  A template that names no class does not change, and the docblocks of the templates keep their names
-  (`@var View $this`).
+  A template that names no class does not change. A class whose short name the template already uses for another
+  class stays fully qualified.
 - In every file that the command changes, the `use` statements are sorted as the CakePHP coding standard expects
   (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`), with the use statements that the file had: by name,
   part by part and without case, the classes before the functions and the constants.

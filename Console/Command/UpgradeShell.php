@@ -471,9 +471,9 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * Imports the classes of the templates and of `bin/cake` with use statements: Rector does not import names in
-     * files with HTML (the `#!` line of `bin/cake`), and does not rename the classes of the templates, whose docblocks
-     * keep their names
+     * Imports the classes of the templates and of `bin/cake` with use statements, also the classes of the docblocks
+     * of the templates: Rector does not import names in files with HTML (the `#!` line of `bin/cake`), and does not
+     * rename the classes of the templates
      *
      * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
      * @param array<string, string> $classes The namespaced names of the classes, by global name

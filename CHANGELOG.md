@@ -21,9 +21,9 @@
   CakePHP 2 layout. `--dry-run` shows the changes as a diff
 - `namespace` imports the classes of CakePHP and of the application with `use` statements in `config/`, the entry
   files (`bin/cake`, `webroot/index.php`, `webroot/test.php`) and the templates, which stay without a namespace. A
-  template gets them at the top, in its first block of PHP or in a new `<?php ... ?>` block, as the templates of
-  CakePHP 5; a template that names no class does not change. `layout` still creates the entry files with the global
-  names, which work in a global application
+  template gets them at the top, also for the classes of its docblocks (`@var View $this`), in its first block of
+  PHP or in a new `<?php ... ?>` block, as the templates of pieceofcake2/app; a template that names no class does not
+  change. `layout` still creates the entry files with the global names, which work in a global application
   ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - `namespace` sorts the `use` statements of the files that it changes, with the ones that the files had, as the
   CakePHP coding standard expects (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`)

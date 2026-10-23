@@ -412,8 +412,9 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
   使っている CakePHP とアプリケーションのクラスに `use` を付けます (`Configure::write()` には
   `use Cake\Core\Configure;`)。変わるのは名前と設定のクラス名だけで、ほかのコードはそのままです。`use` は
   ファイルの docblock の後に、前後に空行を入れて置きます。
-- テンプレートでは、pieceofcake2/app のテンプレートと同じように、先頭に `use` を置きます。テンプレートが PHP の
-  ブロックで始まる場合はそのブロックの中 (docblock の後) に、そうでなければ新しいブロックに置きます。
+- テンプレートでは、pieceofcake2/app のテンプレートと同じように、先頭に `use` を置きます。docblock に書かれた
+  クラスにも `use` を付けます (`@var View $this` には `use Cake\View\View;`)。テンプレートが PHP のブロックで
+  始まる場合はそのブロックの中 (docblock の後) に、そうでなければ新しいブロックに置きます。
 
   ```php
   <?php
@@ -425,7 +426,8 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
   <?php endif; ?>
   ```
 
-  クラスを使っていないテンプレートは変更しません。テンプレートの docblock の名前 (`@var View $this`) もそのままです。
+  クラスを使っていないテンプレートは変更しません。短い名前がテンプレートの中でほかのクラスに使われているクラスは、
+  完全修飾名のまま残します。
 - コマンドが変更するファイルでは、もとからある `use` も含めて、CakePHP のコーディング規約
   (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`) が求める順に `use` を並べ替えます。名前は `\` で
   区切った部分ごとに大文字と小文字を区別せずに比べ、クラス、関数、定数の順に並べます。
