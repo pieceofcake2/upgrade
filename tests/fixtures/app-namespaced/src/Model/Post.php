@@ -2,10 +2,10 @@
 
 namespace App\Model;
 
-use Comment;
-use ArrayObject;
 use App\Model\Behavior\SluggableBehavior;
+use ArrayObject;
 use Cake\Model\Behavior\TreeBehavior;
+use Comment;
 
 /**
  * Post

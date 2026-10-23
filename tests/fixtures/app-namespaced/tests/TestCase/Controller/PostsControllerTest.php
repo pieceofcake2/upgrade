@@ -2,12 +2,12 @@
 
 namespace App\Test\TestCase\Controller;
 
-use Cake\TestSuite\ControllerTestCase;
-use App\Controller\PostsController;
 use App\Controller\Component\GreetingComponent;
-use Cake\Controller\ComponentCollection;
+use App\Controller\PostsController;
 use Cake\Controller\Component;
+use Cake\Controller\ComponentCollection;
 use Cake\Error\NotFoundException;
+use Cake\TestSuite\ControllerTestCase;
 
 class PostsControllerTest extends ControllerTestCase
 {

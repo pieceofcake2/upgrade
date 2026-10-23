@@ -216,5 +216,30 @@ class NamespacePlanTest extends CakeTestCase
         $this->assertSame([], $plan->aliases);
         $this->assertSame([$this->_path('src')], $plan->codePaths());
         $this->assertSame([$this->_path('config'), $this->_path('templates')], $plan->configPaths());
+        $this->assertSame([], $plan->entryFiles());
+        $this->assertSame([$this->_path('templates/Posts/index.php')], $plan->htmlFiles());
+    }
+
+    /**
+     * The entry files of an application, which `upgrade layout` creates, and the files that may hold HTML
+     *
+     * @return void
+     */
+    public function testEntryAndHtmlFiles(): void
+    {
+        $this->_write('config/core.php');
+        $this->_write('bin/cake', "#!/usr/bin/env php\n<?php\n");
+        $this->_write('webroot/index.php');
+        $this->_write('webroot/test.php');
+        $this->_write('webroot/css/app.css', '');
+        $this->_write('webroot/js/app.php');
+        $this->_write('templates/Posts/index.php', "<h1>Posts</h1>\n");
+        $this->_write('templates/Posts/view.ctp', "<h1>Post</h1>\n");
+        $this->_write('templates/Themed/Dark/webroot/css/dark.css', '');
+
+        $plan = NamespacePlan::create($this->_root, 'App', false, self::CORE);
+
+        $this->assertSame([$this->_path('bin/cake'), $this->_path('webroot/index.php'), $this->_path('webroot/test.php')], $plan->entryFiles());
+        $this->assertSame([$this->_path('templates/Posts/index.php'), $this->_path('templates/Posts/view.ctp'), $this->_path('bin/cake')], $plan->htmlFiles());
     }
 }

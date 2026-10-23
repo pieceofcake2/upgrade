@@ -79,7 +79,7 @@ with `--plugin`.
 | `components` | Make components extend the `Component` class. |
 | `exceptions` | Replace `cakeError()` calls with exceptions. |
 | `rector` | Run a set of Rector rules for a change of pieceofcake2/cakephp. Not part of `all`: see [Rector Rules](#rector-rules). |
-| `layout` | Move an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, ...) to the layout of pieceofcake2/app (`config/`, `src/`, `templates/`, ...), or the configuration, templates, translations and tests of a plugin. Not part of `all`: see [Layout and Namespace](#layout-and-namespace). |
+| `layout` | Move an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, ..., or `Config/`, `Controller/`, ... in the root) to the layout of pieceofcake2/app (`config/`, `src/`, `templates/`, ...), or the configuration, templates, translations and tests of a plugin. Not part of `all`: see [Layout and Namespace](#layout-and-namespace). |
 | `namespace` | Move the classes of an application or a plugin into a namespace (`App\`, or the name of the plugin), with `App.namespace` and PSR-4. Not part of `all`: see [Layout and Namespace](#layout-and-namespace). |
 
 ## Options
@@ -271,6 +271,7 @@ of [pieceofcake2/app](https://github.com/pieceofcake2/app), then its classes int
 
 ```bash
 # 1. The CakePHP 2 layout (app/Config/, app/Controller/, app/View/, ...) to config/, src/, templates/, ...
+#    (without app/: Console/cake upgrade layout -root "$PWD" -app "$PWD", see below)
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
 composer dump-autoload
@@ -281,7 +282,8 @@ bin/cake upgrade namespace
 composer dump-autoload
 ```
 
-Run them from the root of the project, the directory that holds `app/` or `config/`. In a Git repository, the files
+Run them from the root of the project, the directory that holds `app/` or `config/` (or `Config/` and `Controller/`
+for an application without `app/`). In a Git repository, the files
 move with `git mv`, so that Git keeps their history; elsewhere they move with `rename()`, and the command says so. A
 file is never overwritten: a move to an existing file is skipped and listed. `--dry-run` lists the moves and, for
 `namespace`, prints the changes as a diff, without changing anything.
@@ -313,16 +315,66 @@ The entry files of the CakePHP 2 layout define its paths, so the entry files of 
 `config/define.php`, `bin/cake`, `webroot/index.php`, `webroot/test.php` and `webroot/.htaccess`, and the directories
 of `tmp/` and `logs/`, are created when they are missing, also in an application already in the new layout. The plugin
 ships copies of these files of pieceofcake2/app in `resources/skeleton/`, so the files do not depend on the version of
-pieceofcake2/app. An existing file is never overwritten.
+pieceofcake2/app. An existing file is never overwritten. The files use the global names of the classes of CakePHP
+(`ShellDispatcher`, `Dispatcher`), which work in a global application; `namespace` imports them with `use`
+statements.
 
 - The constants of your own that the old entry files define (`app/webroot/index.php`, `app/webroot/test.php`,
   `app/Console/cake.php`), e.g. `define('SITE_NAME', 'Blog')`, are added to the new `config/define.php`, which all
   the entry files load. The constants of CakePHP 2 (`ROOT`, `APP_DIR`, `WEBROOT_DIR`, `WWW_ROOT`,
   `CAKE_CORE_INCLUDE_PATH`, ...) are not: the new files define them for the new layout, and Composer loads the core.
-  A constant built on the path of the old file (`__FILE__`, `__DIR__`) is listed for you to define from `ROOT`.
+  A constant built on the path of the old file (`__FILE__`, `__DIR__`) or on the paths of the old layout (`APP`,
+  `APP_DIR`, `CAKE_CORE_INCLUDE_PATH`), or defined under a condition other than `if (!defined(...))`, is listed for
+  you to define by hand.
 - In a Git repository, the old entry files (`app/webroot/index.php`, `app/webroot/test.php`, `app/Console/cake`,
   `cake.php` and `cake.bat`) are removed with `git rm`; Git keeps them in its history, and refuses to remove a file
   with changes that are not committed, which then stays. Outside Git they stay, to be compared and deleted.
+- The entry files that the application already has are kept, and listed for you to review.
+
+An application without `app/`, whose root is the directory `app/` of CakePHP 2 (`Config/`, `Controller/`, `View/`,
+`webroot/`, ... next to `composer.json`), moves the same way from the root: `Config/` to `config/`, `Controller/` to
+`src/Controller/`, the templates of `View/` to `templates/`, `Locale/` to `resources/locales/`, `Test/` to `tests/`,
+`Plugin/` to `plugins/`, `Vendor/` to `vendors/` and `tmp/logs/` to `logs/`. `webroot/` and `tmp/` stay.
+
+- The command tells the layouts apart by the names of the files, with their case. `app/Config/` is the CakePHP 2
+  layout. `Config/core.php` or `config/core.php` with `Controller/` and `webroot/index.php` is an application without
+  `app/`. A directory whose `composer.json` has `"type": "cakephp-plugin"`, or with `Config/`, `Controller/`,
+  `View/`, ... but no `core.php`, is a plugin: run the command with `--plugin` from the application. `config/`
+  otherwise is the new layout.
+- Directories that are lowercase already (`config/`) stay. A rename of the case only (`Config/` to `config/`) also
+  works on a case-insensitive file system, such as the one of macOS, and Git records it. The lowercase `vendor/` is
+  the one of Composer and stays; `Vendor/` moves to `vendors/`, unless it is the `vendor-dir` of `composer.json`.
+- `Plugin/` moves to `plugins/` with the plugins that Composer installed in it. `Plugin/` is the default path of
+  composer/installers for the plugins of CakePHP 2, so `composer.json` gets
+  `"installer-paths": {"plugins/{$name}/": ["type:cakephp-plugin"]}` as in pieceofcake2/app, unless it sets a path
+  for `type:cakephp-plugin` (then `Plugin/{$name}/` becomes `plugins/{$name}/`). Run `composer install` afterwards.
+- The old `webroot/index.php` and `webroot/test.php` (they define `APP_DIR` or `CAKE_CORE_INCLUDE_PATH` and load no
+  `define.php`) are at the place of the new ones: they are replaced when Git has their contents (tracked and
+  committed), else they stay and are listed. `Console/cake`, `cake.php` and `cake.bat` are removed as above.
+- A `Config/define.php` in the old form (it defines `CAKE_CORE_INCLUDE_PATH`, or `ROOT` and `APP_DIR` for the old
+  layout) is replaced by the `config/define.php` of pieceofcake2/app the same way, when Git has its contents. Its own
+  constants are added to the new file, with those of the old entry files, and the ones built on the paths of the old
+  layout or defined under a condition are listed. When it stays, it is listed with what to compare: the new entry
+  files need `ROOT` (the root of the project), `APP_DIR` (`'src'`), `WEBROOT_DIR`, `WWW_ROOT` and `VENDORS`.
+- The entry files that the application already has in the style of pieceofcake2/app (a `bin/cake` or
+  `webroot/index.php` that loads a `define.php`, a `config/define.php` like the one of pieceofcake2/app) keep their
+  code, e.g. settings for AWS Lambda: only the paths of the moved directories in their strings change, e.g.
+  `dirname(__DIR__) . DS . 'Config' . DS . 'define.php'` becomes `dirname(__DIR__) . DS . 'config' . DS . 'define.php'`.
+- The constants of the old entry files that are built on `ROOT`, which was the parent directory of the application,
+  are listed too.
+- `index.php` and `.htaccess` in the root lead to `webroot/` and stay: set the document root of the web server to
+  `webroot/`, then delete them.
+
+Run `layout` of such an application with `-root` and `-app`, from its root:
+
+```bash
+Console/cake upgrade layout -root "$PWD" -app "$PWD"
+```
+
+The console of pieceofcake2/cakephp takes the directory of `composer.json` for the root of the project and looks for
+the application in its `app/`; `-app "$PWD"` tells it that the application is the directory itself. Without them,
+`layout` changes nothing and prints this command. You run the old console only once, for the move: afterwards, the
+`bin/cake` of the new layout works without options.
 
 A plugin keeps its classes where they are, as the `src/` of a plugin holds namespaced classes only (they move into
 `src/` with `namespace`): `Config/` moves to `config/`, the templates of `View/` to `templates/`, `Locale/` to
@@ -344,18 +396,21 @@ of `autoload` and `autoload-dev` (`app/Controller/` becomes `src/Controller/`), 
 What you do by hand, as the command lists it:
 
 - Compare the old entry files with the new ones for code of your own other than constants, and move it.
+- Delete the cache files in `tmp/cache/`, which hold the paths of the old layout. Run `composer install` when
+  `Plugin/` moved to `plugins/`.
 - Set the document root of the web server to `webroot/`: an `index.php` or `.htaccess` in the root of the project
   that leads to `app/webroot/` is listed.
 - The files that do not move: `app/index.php`, `app/.htaccess` and the other files of `app/`. Install the libraries
   of `vendors/` with Composer when they have a package.
 - Remove `$ext = '.thtml'` from your controllers and views when `.thtml` templates became `.php`.
 - Paths in your code (`APP . 'Config' . DS`, `App::build()`), in your web server configuration, in `.gitignore`
-  (`app/tmp/`) and in your deployment are not changed.
+  (`app/tmp/`) and in your deployment are not changed. The lines of `.gitignore` that name moved paths are listed.
 
 ### `namespace`
 
-`namespace` needs the layout of pieceofcake2/app: it stops on the CakePHP 2 layout (`app/Config/`, or the `Config/`,
-`Locale/`, `Test/` or templates of `View/` of a plugin) and asks you to run `layout` first. The changed code needs
+`namespace` needs the layout of pieceofcake2/app: it stops on the CakePHP 2 layout (`app/Config/`, `Config/` or
+`Controller/` in the root, or the `Config/`, `Locale/`, `Test/` or templates of `View/` of a plugin) and asks you to
+run `layout` first. The changed code needs
 pieceofcake2/cakephp 2.13 or later.
 
 The command moves the files:
@@ -388,9 +443,29 @@ Then it changes the code with Rector:
   classes of the application too.
 - The class names of the settings, as [`class-name-strings`](#class-name-strings) does them. Short names that
   `App::className()` resolves keep working when you pass `--no-short-names`.
-- In `config/` and `templates/`, the classes of CakePHP keep their global names, as in the files of CakePHP: only the
-  classes of the application are renamed, and the class names of the settings change. The templates get fully
-  qualified names (`\App\Utility\Slug::normalize()`).
+- `config/`, the entry files (`bin/cake`, the PHP files of `webroot/`) and the templates stay without a namespace,
+  and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
+  `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
+  class names of the settings. The use statements go after the docblock of the file, between blank lines.
+- A template gets the use statements at the top, as in the templates of pieceofcake2/app, also for the classes of its
+  docblocks (`use Cake\View\View;` for `@var View $this`): in its first block of PHP when it starts with one (after
+  the docblock), else in a new block:
+
+  ```php
+  <?php
+  use Cake\Core\Configure;
+  ?>
+  <h2><?php echo h($message); ?></h2>
+  <?php if (Configure::read('debug') > 0) : ?>
+      <?php echo $this->element('exception_stack_trace'); ?>
+  <?php endif; ?>
+  ```
+
+  A template that names no class does not change. A class whose short name the template already uses for another
+  class stays fully qualified.
+- In every file that the command changes, the `use` statements are sorted as the CakePHP coding standard expects
+  (`SlevomatCodingStandard.Namespaces.AlphabeticallySortedUses`), with the use statements that the file had: by name,
+  part by part and without case, the classes before the functions and the constants.
 
 And the configuration:
 
@@ -417,7 +492,6 @@ What `namespace` does not change, as the command lists it or as you check it:
   the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `paginate()`,
   which CakePHP reads as a model alias).
 - Data with the old class names: serialized objects in caches and sessions. Clear the caches.
-- The order of the `use` statements: run your code style fixer.
 
 Run `composer dump-autoload` and your tests afterwards, and review the changes with `git diff`.
 

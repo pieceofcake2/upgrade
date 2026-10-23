@@ -2,18 +2,18 @@
 
 namespace App\Controller;
 
-use Cake\Error\NotFoundException;
-use App\Model\Post;
-use Cake\Controller\Component\PaginatorComponent;
-use App\Controller\Component\GreetingComponent;
-use App\Utility\Slug;
-use DateTime;
-use Cake\View\XmlView;
-use Cake\Controller\Component\RequestHandlerComponent;
-use App\Lib\MyTool;
-use Cake\Utility\ClassRegistry;
 use App\Console\Command\ImportShell;
+use App\Controller\Component\GreetingComponent;
+use App\Lib\MyTool;
 use App\Model\AppModel;
+use App\Model\Post;
+use App\Utility\Slug;
+use Cake\Controller\Component\PaginatorComponent;
+use Cake\Controller\Component\RequestHandlerComponent;
+use Cake\Error\NotFoundException;
+use Cake\Utility\ClassRegistry;
+use Cake\View\XmlView;
+use DateTime;
 use ReflectionClass;
 
 class PostsController extends AppController

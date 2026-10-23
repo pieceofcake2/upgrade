@@ -7,17 +7,17 @@
 
 namespace App\Controller;
 
-use Cake\Controller\Controller;
-use Cake\Controller\Component\SessionComponent;
 use App\Controller\Component\GreetingComponent;
-use Cake\Controller\Component\AuthComponent;
-use Cake\Controller\Component\Auth\FormAuthenticate;
 use Cake\Controller\Component\Auth\BlowfishPasswordHasher;
 use Cake\Controller\Component\Auth\ControllerAuthorize;
-use Cake\View\Helper\HtmlHelper;
-use Cake\View\Helper\FormHelper;
-use Cake\View\Helper\TextHelper;
+use Cake\Controller\Component\Auth\FormAuthenticate;
+use Cake\Controller\Component\AuthComponent;
+use Cake\Controller\Component\SessionComponent;
+use Cake\Controller\Controller;
 use Cake\Utility\CakeText;
+use Cake\View\Helper\FormHelper;
+use Cake\View\Helper\HtmlHelper;
+use Cake\View\Helper\TextHelper;
 
 /**
  * Application Controller

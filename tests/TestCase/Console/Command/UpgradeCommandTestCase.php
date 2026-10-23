@@ -63,6 +63,13 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
     protected $_cwd;
 
     /**
+     * The directory of the application that the console runs, or null for the working directory
+     *
+     * @var string|null
+     */
+    protected $_app;
+
+    /**
      * The errors of the shell
      *
      * @var array<string>
@@ -86,10 +93,13 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
 
         $this->out = new UpgradeCommandTestOutput();
         $in = $this->getMock('ConsoleInput', [], [], '', false);
-        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', 'error'], [$this->out, $this->out, $in]);
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', 'error', '_appDirectory'], [$this->out, $this->out, $in]);
         $this->Shell->expects($this->any())->method('error')->willReturnCallback(function (string $message): void {
             $this->_errors[] = $message;
         });
+        // The console runs the application of the working directory, as Console/cake -root "$PWD" -app "$PWD" does
+        $this->_app = null;
+        $this->Shell->expects($this->any())->method('_appDirectory')->willReturnCallback(fn(): string => $this->_app ?? (string)getcwd() . DS);
     }
 
     /**
@@ -136,6 +146,24 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
     }
 
     /**
+     * Makes a directory a Git repository with one commit of its files
+     *
+     * @param string $dir The directory
+     * @param array<string> $untracked Paths that Git does not track, relative to the directory
+     * @return void
+     */
+    protected function _commit(string $dir, array $untracked = []): void
+    {
+        exec('git -C ' . escapeshellarg($dir) . ' init -q 2>&1', $output, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('git is not available');
+        }
+        $excludes = array_map(static fn(string $path): string => escapeshellarg(':!' . $path), $untracked);
+        exec('git -C ' . escapeshellarg($dir) . ' add -A -- . ' . implode(' ', $excludes));
+        exec('git -C ' . escapeshellarg($dir) . ' -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m Legacy');
+    }
+
+    /**
      * Runs a command of the shell in a directory, with the output of Rector
      *
      * @param string $dir The working directory
@@ -157,7 +185,7 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
     }
 
     /**
-     * The files of a directory, relative to it
+     * The files of a directory, relative to it, without the ones of Git and Composer (`.git/`, `vendor/`)
      *
      * @param string $dir The directory
      * @return array<string>
@@ -167,7 +195,10 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
         $files = [];
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
         foreach ($iterator as $file) {
-            $files[] = str_replace(DS, '/', substr($file->getPathname(), strlen($dir) + 1));
+            $relative = str_replace(DS, '/', substr($file->getPathname(), strlen($dir) + 1));
+            if (!str_starts_with($relative, '.git/') && !str_starts_with($relative, 'vendor/')) {
+                $files[] = $relative;
+            }
         }
         sort($files);
 

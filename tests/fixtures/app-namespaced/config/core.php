@@ -8,10 +8,12 @@
  * @package       app.Config
  */
 
-use Cake\Error\ErrorHandler;
 use App\Error\AppExceptionRenderer;
-use Cake\Model\Datasource\Session\DatabaseSession;
+use Cake\Cache\Cache;
 use Cake\Controller\Component\Acl\DbAcl;
+use Cake\Core\Configure;
+use Cake\Error\ErrorHandler;
+use Cake\Model\Datasource\Session\DatabaseSession;
 
 /**
  * CakePHP Debug Level:

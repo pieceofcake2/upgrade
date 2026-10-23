@@ -20,6 +20,8 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Function_;
 use PhpParser\NodeVisitor;
+use PHPStan\Reflection\ClassReflection;
+use PHPStan\Reflection\ReflectionProvider;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\Rector\AbstractRector;
 use Rector\Reflection\ReflectionResolver;
@@ -45,8 +47,9 @@ final class VariadicOverrideRector extends AbstractRector implements Configurabl
 
     /**
      * @param \Rector\Reflection\ReflectionResolver $reflectionResolver Reflection of the classes
+     * @param \PHPStan\Reflection\ReflectionProvider $reflectionProvider Reflection of the parent classes
      */
-    public function __construct(private ReflectionResolver $reflectionResolver)
+    public function __construct(private ReflectionResolver $reflectionResolver, private ReflectionProvider $reflectionProvider)
     {
     }
 
@@ -108,8 +111,9 @@ CODE_SAMPLE,
             return null;
         }
         $changed = false;
+        $parents = $this->parentNames($classReflection);
         foreach ($this->methods as $class => $methods) {
-            if (!$classReflection->isSubclassOf($class)) {
+            if (!$classReflection->isSubclassOf($class) && !in_array(strtolower($class), $parents, true)) {
                 continue;
             }
             foreach ($node->getMethods() as $classMethod) {
@@ -122,6 +126,29 @@ CODE_SAMPLE,
         }
 
         return $changed ? $node : null;
+    }
+
+    /**
+     * The names of the parent classes as the classes declare them, lowercase. The reflection does not resolve the
+     * global names of pieceofcake2/cakephp 2.13, which are aliases of the classes in the Cake namespace
+     * (`class_alias(Model::class, 'Model')`), so it finds no parents for `class AppModel extends Model`.
+     *
+     * @param \PHPStan\Reflection\ClassReflection $classReflection The class
+     * @return array<string>
+     */
+    private function parentNames(ClassReflection $classReflection): array
+    {
+        $names = [];
+        $reflection = $classReflection->getNativeReflection()->getBetterReflection();
+        while (($parent = $reflection->getParentClassName()) !== null && !in_array(strtolower($parent), $names, true)) {
+            $names[] = strtolower($parent);
+            if (!$this->reflectionProvider->hasClass($parent)) {
+                break;
+            }
+            $reflection = $this->reflectionProvider->getClass($parent)->getNativeReflection()->getBetterReflection();
+        }
+
+        return $names;
     }
 
     /**

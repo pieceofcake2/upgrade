@@ -1,0 +1,30 @@
+{
+    "name": "acme/shop",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "acme/tags": "^1.0",
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "App\\Test\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    },
+    "extra": {
+        "installer-paths": {
+            "plugins/{$name}/": ["type:cakephp-plugin"]
+        }
+    }
+}

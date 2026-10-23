@@ -1,0 +1,32 @@
+{
+    "name": "acme/shop",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "acme/tags": "^1.0",
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "classmap": [
+            "src/Controller/",
+            "src/Model/",
+            "src/Lib/",
+            "src/Console/Command/",
+            "src/View/Helper/"
+        ]
+    },
+    "autoload-dev": {
+        "classmap": ["tests/"]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    },
+    "extra": {
+        "installer-paths": {
+            "plugins/{$name}/": ["type:cakephp-plugin"]
+        }
+    }
+}

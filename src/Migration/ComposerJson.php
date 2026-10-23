@@ -117,6 +117,31 @@ final class ComposerJson
     }
 
     /**
+     * Adds an installer path of composer/installers for a type of packages, unless one is set for the type
+     *
+     * @param string $path The path, e.g. `plugins/{$name}/`
+     * @param string $type The type, e.g. `type:cakephp-plugin`
+     * @return bool Whether it was added
+     */
+    public function addInstallerPath(string $path, string $type): bool
+    {
+        $installerPaths = $this->data['extra']['installer-paths'] ?? [];
+        if (!is_array($installerPaths) || !is_array($this->data['extra'] ?? [])) {
+            return false;
+        }
+        foreach ($installerPaths as $types) {
+            if (in_array($type, (array)$types, true)) {
+                return false;
+            }
+        }
+        $installerPaths[$path] = [$type];
+        $this->data['extra']['installer-paths'] = $installerPaths;
+        $this->changed['extra'] = true;
+
+        return true;
+    }
+
+    /**
      * Replaces the paths of the autoloading and of `extra.installer-paths` that are in moved directories
      *
      * @param array<string, string> $moves The new paths of the directories, by old path, relative to the file
@@ -198,8 +223,9 @@ final class ComposerJson
                 return $new;
             }
         }
-        foreach (array_keys($moves) as $from) {
-            if (str_starts_with($from, $normalized . '/')) {
+        // A path that holds a moved directory, unless it also holds its new place (src/ for src/Lib/Utility/)
+        foreach ($moves as $from => $to) {
+            if (str_starts_with($from, $normalized . '/') && !str_starts_with($to, $normalized . '/')) {
                 $result[1][] = sprintf('%s: %s', $where, $path);
                 break;
             }
@@ -250,24 +276,26 @@ final class ComposerJson
                 $contents = substr($contents, 0, $start) . $value . substr($contents, $end);
                 continue;
             }
-            $contents = $this->insertSection($contents, $indent . json_encode($section) . ': ' . $value, $spans, $eol);
+            $previous = $section === 'extra' ? ['config'] : ['autoload', 'require-dev', 'require'];
+            $contents = $this->insertSection($contents, $indent . json_encode($section) . ': ' . $value, $spans, $eol, $previous);
         }
 
         return $contents;
     }
 
     /**
-     * Inserts a new section after require-dev, require or autoload, else at the end
+     * Inserts a new section after the first of the given sections that exists, else at the end
      *
      * @param string $contents The JSON text
      * @param string $entry The key and the value of the section
      * @param array<string, array{int, int}> $spans The offsets of the values of the top-level keys
      * @param string $eol The line ending
+     * @param array<string> $after The sections to insert it after, the preferred first
      * @return string
      */
-    private function insertSection(string $contents, string $entry, array $spans, string $eol): string
+    private function insertSection(string $contents, string $entry, array $spans, string $eol, array $after): string
     {
-        foreach (['autoload', 'require-dev', 'require'] as $previous) {
+        foreach ($after as $previous) {
             if (isset($spans[$previous])) {
                 $after = $spans[$previous][1];
 

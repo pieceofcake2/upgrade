@@ -154,4 +154,30 @@ class MoverTest extends CakeTestCase
         $this->assertSame(['src/Model/Post.php'], $files);
         $this->assertSame('draft', file_get_contents($this->_root . '/src/Model/Draft.php'));
     }
+
+    /**
+     * Whether Git has the contents of a file: tracked, and committed without changes since
+     *
+     * @return void
+     */
+    public function testIsCommitted(): void
+    {
+        exec('git -C ' . escapeshellarg($this->_root) . ' init -q 2>&1', $output, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('git is not available');
+        }
+        $this->_write('webroot/index.php', 'old');
+        $this->_write('webroot/test.php', 'old');
+        $this->_write('webroot/new.php', 'new');
+        $mover = new Mover($this->_root);
+        exec('git -C ' . escapeshellarg($this->_root) . ' add webroot/index.php webroot/test.php');
+        $this->assertFalse($mover->isCommitted($this->_root . '/webroot/index.php'));
+
+        exec('git -C ' . escapeshellarg($this->_root) . ' -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m Old');
+        $this->_write('webroot/test.php', 'changed');
+
+        $this->assertTrue($mover->isCommitted($this->_root . '/webroot/index.php'));
+        $this->assertFalse($mover->isCommitted($this->_root . '/webroot/test.php'));
+        $this->assertFalse($mover->isCommitted($this->_root . '/webroot/new.php'));
+    }
 }

@@ -2,8 +2,8 @@
 
 namespace App\Controller\Component;
 
-use Cake\Controller\Controller;
 use Cake\Controller\Component;
+use Cake\Controller\Controller;
 
 class GreetingComponent extends Component
 {

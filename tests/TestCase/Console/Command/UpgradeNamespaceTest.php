@@ -43,6 +43,68 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
     }
 
     /**
+     * An application that `layout` moved from the CakePHP 2 layout without `app/` becomes
+     * `tests/fixtures/root-app-namespaced`, with the use statements of the entry files that it kept (`bin/cake`)
+     *
+     * @return void
+     */
+    public function testRootApplication(): void
+    {
+        $app = $this->_copy('root-app', 'app');
+
+        $this->_run($app, ['namespace']);
+
+        $this->_assertSameTree($this->_fixture('root-app-namespaced'), $app);
+        $this->assertStringContainsString("\n */\n\nuse Cake\\Console\\ShellDispatcher;\n\nif (!defined('DS')) {\n", (string)file_get_contents($app . '/bin/cake'));
+        $this->assertStringNotContainsString('by hand', $this->out->output);
+        $this->assertSame([], $this->_errors);
+    }
+
+    /**
+     * The classes of CakePHP get use statements in `config/`, the entry files and the templates that name them; the
+     * code and the other templates stay as they are
+     *
+     * @return void
+     */
+    public function testCoreClassImports(): void
+    {
+        $app = $this->_copy('app', 'app');
+
+        $this->_run($app, ['namespace']);
+
+        $file = static fn(string $path): string => (string)file_get_contents($app . DS . str_replace('/', DS, $path));
+        // A template with a class of CakePHP after its HTML, one that starts with a block of PHP, and one with a class
+        // in its docblock only
+        $this->assertStringStartsWith("<?php\nuse Cake\\Core\\Configure;\n?>\n<h2><?php echo h(\$message); ?></h2>\n<?php\nif (Configure::read('debug') > 0):\n", $file('templates/Error/error400.php'));
+        $this->assertStringStartsWith(
+            "<?php\n/**\n * The home page\n *\n * @var View \$this\n */\n\nuse App\\Utility\\Slug;\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\Utility\\Debugger;\nuse Cake\\View\\View;\n\nif (!Configure::read('debug')):\n    throw new NotFoundException();\nendif;\n?>\n",
+            $file('templates/Pages/home.php'),
+        );
+        $this->assertStringStartsWith("<?php\n/**\n * @var AppView \$this\n */\n\nuse App\\View\\AppView;\n\n?>\n<nav>", $file('templates/element/menu.php'));
+        // Templates without classes
+        foreach (['templates/Posts/view.php', 'templates/layout/default.php', 'templates/Scaffolds/index.ctp'] as $template) {
+            $this->assertFileEquals($this->_fixture('app/' . $template), $app . DS . $template, $template);
+        }
+        // config/
+        $this->assertStringContainsString(" */\n\nuse App\\Log\\Engine\\AuditLog;\nuse App\\Routing\\Filter\\MaintenanceFilter;\nuse Cake\\Cache\\Cache;\nuse Cake\\Cache\\Engine\\FileEngine;\nuse Cake\\Core\\CakePlugin;\nuse Cake\\Core\\Configure;\n", $file('config/bootstrap.php'));
+        $this->assertStringContainsString("\nCache::config('default', ['engine' => FileEngine::class]);\n\nConfigure::write('Dispatcher.filters', [\n", $file('config/bootstrap.php'));
+        $this->assertStringContainsString("\nCakePlugin::load('Blog');\n", $file('config/bootstrap.php'));
+        $this->assertStringStartsWith("<?php\n\nuse App\\Routing\\Route\\SlugRoute;\nuse Cake\\Core\\CakePlugin;\nuse Cake\\Routing\\Router;\n\nRouter::connect('/', ", $file('config/routes.php'));
+        $this->assertStringContainsString(" * @package       app.Config\n */\n\nuse App\\Error\\AppExceptionRenderer;\nuse Cake\\Cache\\Cache;\n", $file('config/core.php'));
+        $this->assertStringContainsString("/**\n * CakePHP Debug Level:\n */\nConfigure::write('debug', 0);\n", $file('config/core.php'));
+        $this->assertFileEquals($this->_fixture('app/config/define.php'), $app . DS . 'config' . DS . 'define.php');
+        // The entry files
+        $this->assertStringContainsString(" */\n\nuse Cake\\Network\\CakeRequest;\nuse Cake\\Network\\CakeResponse;\nuse Cake\\Routing\\Dispatcher;\nuse Composer\\InstalledVersions;\n\n", $file('webroot/index.php'));
+        $this->assertStringEndsWith("\n\$dispatcher = new Dispatcher();\n\$dispatcher->dispatch(\n    new CakeRequest(),\n    new CakeResponse(),\n);\n", $file('webroot/index.php'));
+        $this->assertStringContainsString(" */\n\nuse Cake\\Core\\Configure;\nuse Cake\\Error\\NotFoundException;\nuse Cake\\TestSuite\\CakeTestSuiteDispatcher;\nuse Composer\\InstalledVersions;\n\n", $file('webroot/test.php'));
+        $this->assertStringEndsWith("\nCakeTestSuiteDispatcher::run();\n", $file('webroot/test.php'));
+        $this->assertStringStartsWith("#!/usr/bin/env php\n<?php\n/**\n", $file('bin/cake'));
+        $this->assertStringContainsString(" * @license       https://opensource.org/licenses/mit-license.php MIT License\n */\n\nuse Cake\\Console\\ShellDispatcher;\n\nif (!defined('DS')) {\n", $file('bin/cake'));
+        $this->assertStringEndsWith("\nShellDispatcher::run(\$argv);\n", $file('bin/cake'));
+        $this->assertTrue(is_executable($app . DS . 'bin' . DS . 'cake'));
+    }
+
+    /**
      * The commands of the upgrade in their order, from the CakePHP 2 layout: layout, then namespace. A second run
      * changes nothing.
      *
@@ -85,6 +147,10 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $this->assertStringContainsString("-    public \$uses = ['Post', 'Blog.Comment'];\n+    public \$uses = [Post::class, 'Blog.Comment'];", $output);
         $this->assertStringContainsString("+Configure::write('App.namespace', 'App');", $output);
         $this->assertStringContainsString('+            "App\\\\": "src/"', $output);
+        $this->assertStringContainsString("--- webroot/index.php\n+++ webroot/index.php", $output);
+        $this->assertStringContainsString('+use Cake\Routing\Dispatcher;', $output);
+        $this->assertStringContainsString("--- bin/cake\n+++ bin/cake", $output);
+        $this->assertStringNotContainsString('webroot/css', $output);
         $this->assertStringNotContainsString(TMP, $output);
         $this->assertSame([], glob(TMP . 'upgrade-dry-run-*') ?: []);
     }
@@ -161,15 +227,25 @@ class UpgradeNamespaceTest extends UpgradeCommandTestCase
         $plugins = $this->_copy('legacy-plugin', 'plugins');
         App::build(['Plugin' => [$plugins . DS]]);
 
+        $root = $this->_copy('legacy-root-app', 'root');
+        $mixed = $this->_copy('legacy-root-app', 'mixed');
+        rename($mixed . '/Config', $mixed . '/config.tmp');
+        rename($mixed . '/config.tmp', $mixed . '/config');
+
         $this->_run($app, ['namespace']);
         $this->_run($app, ['namespace', '--plugin', 'Blog']);
+        $this->_run($root, ['namespace']);
+        $this->_run($mixed, ['namespace']);
 
         $this->assertSame([
             'The application is in the CakePHP 2 layout (app/Config/): run bin/cake upgrade layout first.',
             'Blog is in the CakePHP 2 layout (Config/): run bin/cake upgrade layout --plugin Blog first.',
+            'The application is in the CakePHP 2 layout (Config/): run bin/cake upgrade layout first.',
+            'The application is in the CakePHP 2 layout (Controller/): run bin/cake upgrade layout first.',
         ], $this->_errors);
         $this->_assertSameTree($this->_fixture('legacy-app'), $app);
         $this->_assertSameTree($this->_fixture('legacy-plugin'), $plugins);
+        $this->_assertSameTree($this->_fixture('legacy-root-app'), $root);
     }
 
     /**

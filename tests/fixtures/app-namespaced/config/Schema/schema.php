@@ -1,4 +1,7 @@
 <?php
+
+use Cake\Model\CakeSchema;
+
 class AppSchema extends CakeSchema
 {
     public $posts = [

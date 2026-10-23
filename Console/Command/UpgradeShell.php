@@ -23,6 +23,7 @@ use PieceOfCake2\Upgrade\Migration\EntryFiles;
 use PieceOfCake2\Upgrade\Migration\HeaderFormatter;
 use PieceOfCake2\Upgrade\Migration\LayoutPlan;
 use PieceOfCake2\Upgrade\Migration\Mover;
+use PieceOfCake2\Upgrade\Migration\NameImporter;
 use PieceOfCake2\Upgrade\Migration\NamespacePlan;
 use PieceOfCake2\Upgrade\Migration\Paths;
 use PieceOfCake2\Upgrade\Rector\Report;
@@ -221,10 +222,10 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * Moves an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, `app/View/`, ...) to the
-     * layout of pieceofcake2/app (`config/`, `src/`, `templates/`, `resources/locales/`, `tests/`, `webroot/`), or the
-     * configuration, templates, translations and tests of the plugin given with `--plugin`. Run from the root of
-     * the project. Not part of all.
+     * Moves an application from the CakePHP 2 layout (`app/Config/`, `app/Controller/`, `app/View/`, ..., or
+     * `Config/`, `Controller/`, `View/`, ... in the root) to the layout of pieceofcake2/app (`config/`, `src/`,
+     * `templates/`, `resources/locales/`, `tests/`, `webroot/`), or the configuration, templates, translations and
+     * tests of the plugin given with `--plugin`. Run from the root of the project. Not part of all.
      *
      * @return void
      */
@@ -232,35 +233,78 @@ class UpgradeShell extends AppShell
     {
         $plugin = $this->params['plugin'] ?? null;
         $root = $plugin ? $this->_pluginPath((string)$plugin) : $this->_projectRoot();
-        if ($root === null) {
+        if ($root === null || (!$plugin && !$this->_runsRootApplication($root))) {
             return;
         }
         $plan = $plugin ? LayoutPlan::forPlugin($root) : LayoutPlan::forApplication($root);
         $dryRun = !empty($this->params['dry-run']);
         $mover = new Mover($root);
         $entryFiles = $plan->entryFiles;
-        $nothing = $plan->moves === [] && ($entryFiles === null || ($entryFiles->files === [] && $entryFiles->directories === []));
+        $nothing = $plan->moves === [] && ($entryFiles === null || ($entryFiles->files === [] && $entryFiles->directories === [] && $entryFiles->replaced === []));
         if ($nothing) {
             $this->out(__d('cake_console', 'Nothing to move: %s is in the layout of pieceofcake2/app.', $plugin ?: $root));
         } elseif (!$dryRun && !$mover->usesGit()) {
             $this->out(__d('cake_console', '<warning>Not a Git repository: the files are moved with rename(), so Git does not see them as moves.</warning>'));
         }
-        $this->_move($plan, $mover, $dryRun, $plugin ? ['View', 'Locale', 'Test', 'templates'] : ['app', 'templates']);
-        if ($entryFiles !== null) {
-            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun);
-        }
+        // Read before the moves, which may move this plugin (Plugin/Upgrade/ to plugins/Upgrade/) and its autoloading
         $composer = $root . DS . 'composer.json';
-        if (is_file($composer) && $plan->paths !== []) {
-            $json = new ComposerJson((string)file_get_contents($composer));
+        $json = is_file($composer) && $plan->paths !== [] ? new ComposerJson((string)file_get_contents($composer)) : null;
+        // Before the moves, which Git sees as changes of the moved files
+        $committed = $entryFiles !== null ? $this->_committedEntryFiles($root, $entryFiles, $mover) : [];
+        $this->_move($plan, $mover, $dryRun);
+        if ($entryFiles !== null) {
+            $this->_createEntryFiles($root, $entryFiles, $mover, $dryRun, $committed);
+            $this->_reviewEntryFiles($root, $plan, $dryRun);
+        }
+        if ($json !== null) {
             $this->_moveComposerPaths($json, $plan->paths, 'composer.json');
+            // Plugin/ is the default path of composer/installers for the plugins of CakePHP 2, and it moved
+            if ($plan->layout === LayoutPlan::ROOT_APP && $json->addInstallerPath('plugins/{$name}/', 'type:cakephp-plugin')) {
+                $this->out(__d('cake_console', 'Update composer.json: extra.installer-paths: plugins/{$name}/ for type:cakephp-plugin, as Plugin/ moved to plugins/'));
+            }
             if (!$dryRun && $json->isChanged()) {
                 file_put_contents($composer, $json->contents());
             }
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
-        if (!$nothing && !$dryRun) {
-            $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace%s` moves the classes into a namespace.', $plugin ? ' --plugin ' . $plugin : ''));
+        if (!$nothing && !$dryRun && $plugin) {
+            $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace --plugin %s` moves the classes into a namespace.', $plugin));
+        } elseif (!$nothing && !$dryRun) {
+            // composer install puts the plugins of Composer in plugins/
+            $this->out(__d('cake_console', 'Next, delete the cache files in tmp/cache/, which hold the paths of the old layout, and run composer %s and the tests. Then `bin/cake upgrade namespace` moves the classes into a namespace.', $plan->layout === LayoutPlan::ROOT_APP ? 'install' : 'dump-autoload'));
         }
+    }
+
+    /**
+     * Whether the console runs the application, for an application whose root is the directory `app/` of CakePHP 2.
+     * The console of CakePHP 2 takes the directory of composer.json for the root of the project and looks for the
+     * application in its `app/`, unless `-root` and `-app` say where it is: then it prints the command to run.
+     *
+     * @param string $root The root of the project
+     * @return bool
+     */
+    protected function _runsRootApplication($root)
+    {
+        if (LayoutPlan::detect($root) !== LayoutPlan::ROOT_APP) {
+            return true;
+        }
+        $app = rtrim($this->_appDirectory(), DS);
+        if ((realpath($app) ?: $app) === $root) {
+            return true;
+        }
+        $this->error(__d('cake_console', 'The console runs the application of %s, not %s, which has Config/ and Controller/ in its root: the console looks for the application in app/ of the directory of composer.json. Run `Console/cake upgrade layout -root "$PWD" -app "$PWD"` from %s.', $app, $root, $root));
+
+        return false;
+    }
+
+    /**
+     * The directory of the application that the console runs
+     *
+     * @return string
+     */
+    protected function _appDirectory()
+    {
+        return APP;
     }
 
     /**
@@ -269,10 +313,9 @@ class UpgradeShell extends AppShell
      * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
      * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves the files
      * @param bool $dryRun Whether to only show the moves
-     * @param array<string> $sources The directories that the moves empty, relative to the root
      * @return void
      */
-    protected function _move(LayoutPlan $plan, Mover $mover, $dryRun, array $sources)
+    protected function _move(LayoutPlan $plan, Mover $mover, $dryRun)
     {
         foreach ($plan->moves as [$from, $to]) {
             $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
@@ -283,8 +326,11 @@ class UpgradeShell extends AppShell
         if ($dryRun || $plan->moves === []) {
             return;
         }
-        foreach ($sources as $dir) {
-            $mover->removeEmpty($plan->root . DS . $dir);
+        foreach ($plan->sources as $dir) {
+            // With the case of the name: on a case-insensitive file system, Vendor/ would be vendor/ of Composer
+            if (Paths::hasDirectory($plan->root, $dir)) {
+                $mover->removeEmpty($plan->root . DS . $dir);
+            }
         }
     }
 
@@ -296,9 +342,10 @@ class UpgradeShell extends AppShell
      * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
      * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Moves and removes the files
      * @param bool $dryRun Whether to only show the changes
+     * @param array<string> $committed The old entry files to replace whose contents Git has
      * @return void
      */
-    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
+    protected function _createEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun, array $committed = [])
     {
         foreach ($entryFiles->directories as $dir) {
             $this->out(__d('cake_console', 'Create the directory %s', $dir));
@@ -320,10 +367,128 @@ class UpgradeShell extends AppShell
                 chmod($path, 0755);
             }
         }
+        if (isset($entryFiles->replaced[EntryFiles::DEFINE]) && !in_array(EntryFiles::DEFINE, $committed, true)) {
+            // The old config/define.php stays: review it, its constants and those of the other old entry files
+            $entryFiles->review[] = EntryFiles::DEFINE;
+            if ($entryFiles->kept !== []) {
+                $this->out(__d('cake_console', '<warning>config/define.php is not replaced, so these constants of the old entry files were not added to it: %s.</warning>', implode(', ', array_keys($entryFiles->kept))));
+                $entryFiles->kept = [];
+            }
+        }
         foreach ($entryFiles->kept as $constant => $file) {
             $this->out(__d('cake_console', 'Keep the constant %s of %s in config/define.php', $constant, $file));
         }
+        $this->_replaceOldEntryFiles($root, $entryFiles, $dryRun, $committed);
         $this->_removeOldEntryFiles($root, $entryFiles, $mover, $dryRun);
+    }
+
+    /**
+     * The old entry files to replace whose contents Git has (tracked and committed), before the moves
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Checks the files in Git
+     * @return array<string> The files, at their place after the moves
+     */
+    protected function _committedEntryFiles($root, EntryFiles $entryFiles, Mover $mover)
+    {
+        $committed = [];
+        foreach (array_keys($entryFiles->replaced) as $file) {
+            $source = $entryFiles->sources[$file] ?? $file;
+            if ($mover->isCommitted($root . DS . str_replace('/', DS, $source))) {
+                $committed[] = $file;
+            }
+        }
+
+        return $committed;
+    }
+
+    /**
+     * Replaces the old entry files that are at the place of a new one (`webroot/index.php` of an application whose
+     * root is the directory `app/` of CakePHP 2, a `define.php` in the old form), when Git keeps their contents; else
+     * they stay and are listed
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\EntryFiles $entryFiles The entry files
+     * @param bool $dryRun Whether to only show the changes
+     * @param array<string> $committed The files whose contents Git has
+     * @return void
+     */
+    protected function _replaceOldEntryFiles($root, EntryFiles $entryFiles, $dryRun, array $committed)
+    {
+        $left = [];
+        foreach ($entryFiles->replaced as $file => $contents) {
+            $path = $root . DS . str_replace('/', DS, $file);
+            if (!in_array($file, $committed, true)) {
+                $left[] = $file;
+                continue;
+            }
+            $this->out(__d('cake_console', 'Replace %s of the CakePHP 2 layout with the one of pieceofcake2/app', $file));
+            if (!$dryRun) {
+                file_put_contents($path, $contents);
+            }
+        }
+        if ($left !== []) {
+            $this->out(__d('cake_console', '<warning>Replace %s of the CakePHP 2 layout with the files of pieceofcake2/app in resources/skeleton/ of pieceofcake2/upgrade, once you have compared them: Git does not have their contents (not committed).</warning>', implode(', ', $left)));
+        }
+    }
+
+    /**
+     * Updates the paths of the moved directories in the entry files that the application has (`bin/cake`,
+     * `config/define.php`, ...), and lists them for review
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param bool $dryRun Whether to only show the changes
+     * @return void
+     */
+    protected function _reviewEntryFiles($root, LayoutPlan $plan, $dryRun)
+    {
+        $review = $plan->entryFiles !== null ? $plan->entryFiles->review : [];
+        if ($review === []) {
+            return;
+        }
+        $paths = array_filter($plan->paths, static fn(string $from): bool => !str_contains($from, '/'), ARRAY_FILTER_USE_KEY);
+        foreach ($review as $file) {
+            $path = $root . DS . str_replace('/', DS, $file);
+            if (!is_file($path)) {
+                // In a dry run, the file is still at its old place
+                $path = $this->_oldPath($root, $plan, $file) ?? $path;
+            }
+            $code = (string)file_get_contents($path);
+            [$moved, $changes] = EntryFiles::movePaths($code, $paths);
+            if ($changes !== []) {
+                $this->out(__d('cake_console', 'Update the paths of %s: %s', $file, implode(', ', $changes)));
+                if (!$dryRun) {
+                    file_put_contents($path, $moved);
+                }
+            }
+            $notice = $file === EntryFiles::DEFINE ? EntryFiles::defineNotice($moved) : null;
+            if ($notice !== null) {
+                $plan->notices[] = $notice;
+            }
+        }
+        $plan->notices[] = sprintf('Kept the entry files that the application has, review them for the new layout: %s.', implode(', ', $review));
+    }
+
+    /**
+     * The path of a file before the moves
+     *
+     * @param string $root The root of the project
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param string $file The file after the moves, relative to the root
+     * @return string|null
+     */
+    protected function _oldPath($root, LayoutPlan $plan, $file)
+    {
+        foreach ($plan->moves as [$from, $to]) {
+            $relative = str_replace(DS, '/', substr($to, strlen($root) + 1));
+            if ($file === $relative || str_starts_with($file, $relative . '/')) {
+                return $from . str_replace('/', DS, substr($file, strlen($relative)));
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -339,7 +504,7 @@ class UpgradeShell extends AppShell
     protected function _removeOldEntryFiles($root, EntryFiles $entryFiles, Mover $mover, $dryRun)
     {
         $left = [];
-        foreach ($entryFiles->oldFiles as $file) {
+        foreach (array_diff($entryFiles->oldFiles, $entryFiles->sources) as $file) {
             $path = $root . DS . str_replace('/', DS, $file);
             if ($dryRun ? $mover->canRemove($path) : $mover->remove($path)) {
                 $this->out(__d('cake_console', 'Remove %s, which the files of pieceofcake2/app replace', $file));
@@ -385,7 +550,7 @@ class UpgradeShell extends AppShell
             $mover->removeEmpty($work . DS . $dir);
         }
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
-        $configFiles = $this->_hashes($plan->configPaths());
+        $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
 
         $cwd = (string)getcwd();
         chdir($work);
@@ -394,7 +559,7 @@ class UpgradeShell extends AppShell
         } finally {
             chdir($cwd);
         }
-        $this->_formatHeaders($plan, $configFiles);
+        $this->_formatHeaders($plan, $hashes);
         if ($code !== 0) {
             if ($before !== null) {
                 (new Folder(dirname($work, 2)))->delete();
@@ -403,6 +568,7 @@ class UpgradeShell extends AppShell
 
             return $code;
         }
+        $this->_importNames($plan, array_merge($core, $plan->classes));
         if (!$plugin) {
             $this->_addAppNamespace($work, $namespace);
         }
@@ -420,15 +586,19 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * The hashes of the PHP files of directories, to find the files that Rector changes
+     * The hashes of files and of the PHP files of directories, to find the files that Rector changes
      *
-     * @param array<string> $dirs The directories
+     * @param array<string> $dirs The directories and files
      * @return array<string, string> The hashes, by path
      */
     protected function _hashes(array $dirs)
     {
         $hashes = [];
         foreach ($dirs as $dir) {
+            if (is_file($dir)) {
+                $hashes[$dir] = (string)md5_file($dir);
+                continue;
+            }
             $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
             foreach ($iterator as $file) {
                 if ($file->isFile() && $file->getExtension() === 'php') {
@@ -442,7 +612,8 @@ class UpgradeShell extends AppShell
 
     /**
      * Orders the docblock, namespace and use statements at the beginning of the namespaced files and of the other
-     * files that Rector changed, and separates the class_alias() of the core class overrides
+     * files that Rector changed, sorts the use statements, and separates the class_alias() of the core class
+     * overrides
      *
      * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
      * @param array<string, string> $hashes The hashes of the other files before Rector, by path
@@ -451,7 +622,7 @@ class UpgradeShell extends AppShell
     protected function _formatHeaders(NamespacePlan $plan, array $hashes)
     {
         $changed = array_keys(array_filter($hashes, static fn(string $hash, string $file): bool => md5_file($file) !== $hash, ARRAY_FILTER_USE_BOTH));
-        foreach (array_merge(array_keys($plan->files), $changed) as $file) {
+        foreach (array_unique(array_merge(array_keys($plan->files), $changed)) as $file) {
             if (!is_file($file)) {
                 continue;
             }
@@ -460,6 +631,26 @@ class UpgradeShell extends AppShell
                 $contents = (string)preg_replace('/^}(\r?\n)class_alias\(/m', '}$1$1class_alias(', $contents);
             }
             file_put_contents($file, $contents);
+        }
+    }
+
+    /**
+     * Imports the classes of the templates and of `bin/cake` with use statements, also the classes of the docblocks
+     * of the templates: Rector does not import names in files with HTML (the `#!` line of `bin/cake`), and does not
+     * rename the classes of the templates
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param array<string, string> $classes The namespaced names of the classes, by global name
+     * @return void
+     */
+    protected function _importNames(NamespacePlan $plan, array $classes)
+    {
+        foreach ($plan->htmlFiles() as $file) {
+            $code = (string)file_get_contents($file);
+            $imported = NameImporter::import($code, $classes);
+            if ($imported !== $code) {
+                file_put_contents($file, $imported);
+            }
         }
     }
 
@@ -503,8 +694,8 @@ class UpgradeShell extends AppShell
     }
 
     /**
-     * Runs the rules of `upgrade namespace` on the code (`src/`, `tests/`), then on `config/` and `templates/`, in
-     * which the classes of CakePHP keep their global names
+     * Runs the rules of `upgrade namespace` on the code (`src/`, `tests/`), then on `config/`, `templates/` and the
+     * entry files of `webroot/`, which stay without a namespace
      *
      * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
      * @param string|null $namespace App.namespace of an application, or null for a plugin
@@ -520,25 +711,27 @@ class UpgradeShell extends AppShell
             }
         }
         $appNamespace = $namespace ?? Configure::read('App.namespace');
+        $entryFiles = array_filter($plan->entryFiles(), static fn(string $file): bool => str_ends_with($file, '.php'));
         $runs = [
             [$plan->codePaths(), true, ['php']],
-            [$plan->configPaths(), false, ['php', 'ctp']],
+            [array_merge($plan->configPaths(), array_values($entryFiles)), false, ['php', 'ctp']],
         ];
         $code = 0;
-        foreach ($runs as [$paths, $renameCore, $extensions]) {
+        foreach ($runs as [$paths, $namespaced, $extensions]) {
             if ($paths === []) {
                 continue;
             }
             $file = (string)tempnam(TMP, 'upgrade-plan-');
             file_put_contents($file, json_encode([
-                'files' => $renameCore ? $plan->files : [],
-                'aliases' => $renameCore ? $plan->aliases : [],
+                'files' => $namespaced ? $plan->files : [],
+                'aliases' => $namespaced ? $plan->aliases : [],
                 'classes' => $plan->classes,
                 'namespace' => is_string($appNamespace) && $appNamespace !== '' ? $appNamespace : null,
                 'shortNames' => empty($this->params['no-short-names']),
                 'indexPaths' => array_values(array_unique($indexPaths)),
-                'renameCore' => $renameCore,
                 'extensions' => $extensions,
+                // The templates get their use statements from _importNames()
+                'keepNames' => !$namespaced && is_dir($plan->root . DS . 'templates') ? [$plan->root . DS . 'templates'] : [],
             ]));
             $command = [
                 PHP_BINARY,
@@ -728,12 +921,17 @@ class UpgradeShell extends AppShell
     protected function _copyForDryRun($root, $name)
     {
         $copy = TMP . 'upgrade-dry-run-' . getmypid() . DS . $name . DS . basename($root);
-        $skip = ['vendor', 'node_modules', '.git', 'tmp', 'logs', 'webroot', 'plugins'];
+        $skip = ['vendor', 'node_modules', '.git', 'tmp', 'logs', 'plugins'];
+        // Of webroot/, only the PHP files of the entry files
+        $filter = static function (SplFileInfo $file, $key, RecursiveDirectoryIterator $iterator) use ($skip): bool {
+            if ($iterator->getSubPath() === 'webroot') {
+                return $file->isFile() && $file->getExtension() === 'php';
+            }
+
+            return !($iterator->getSubPath() === '' && $file->isDir() && in_array($file->getFilename(), $skip, true));
+        };
         $iterator = new RecursiveIteratorIterator(
-            new RecursiveCallbackFilterIterator(
-                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
-                static fn(SplFileInfo $file, $key, RecursiveDirectoryIterator $iterator): bool => !($iterator->getSubPath() === '' && $file->isDir() && in_array($file->getFilename(), $skip, true)),
-            ),
+            new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), $filter),
             RecursiveIteratorIterator::SELF_FIRST,
         );
         mkdir($copy, 0777, true);
@@ -778,8 +976,14 @@ class UpgradeShell extends AppShell
     protected function _projectRoot($check = true)
     {
         $root = (string)realpath((string)getcwd());
-        if ($check && !Paths::hasDirectory($root, 'app') && !Paths::hasDirectory($root, 'config')) {
-            $this->error(__d('cake_console', 'Neither app/ nor config/ in %s: run the command from the root of the project.', $root));
+        $layout = $check ? LayoutPlan::detect($root) : null;
+        if ($layout === LayoutPlan::NONE) {
+            $this->error(__d('cake_console', 'Neither app/, Config/ nor config/ in %s: run the command from the root of the project.', $root));
+
+            return null;
+        }
+        if ($layout === LayoutPlan::PLUGIN) {
+            $this->error(__d('cake_console', '%s holds a plugin: run the command with --plugin <Name> from the root of the application.', $root));
 
             return null;
         }

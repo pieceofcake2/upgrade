@@ -104,6 +104,27 @@ JSON, $composer->contents());
     }
 
     /**
+     * The installer path of a type, at the end of the file after config, unless a path is set for the type
+     *
+     * @return void
+     */
+    public function testAddInstallerPath(): void
+    {
+        $composer = new ComposerJson("{\n    \"require\": {\n        \"php\": \">=8.0\"\n    },\n    \"config\": {\n        \"sort-packages\": true\n    }\n}\n");
+
+        $this->assertTrue($composer->addInstallerPath('plugins/{$name}/', 'type:cakephp-plugin'));
+        $this->assertFalse($composer->addInstallerPath('Plugin/{$name}/', 'type:cakephp-plugin'));
+        $this->assertSame(
+            "{\n    \"require\": {\n        \"php\": \">=8.0\"\n    },\n    \"config\": {\n        \"sort-packages\": true\n    },\n    \"extra\": {\n        \"installer-paths\": {\n            \"plugins/{\$name}/\": [\"type:cakephp-plugin\"]\n        }\n    }\n}\n",
+            $composer->contents(),
+        );
+
+        $composer = new ComposerJson('{"extra": {"installer-paths": {"lib/{$name}/": ["type:library", "type:cakephp-plugin"]}}}');
+        $this->assertFalse($composer->addInstallerPath('plugins/{$name}/', 'type:cakephp-plugin'));
+        $this->assertFalse($composer->isChanged());
+    }
+
+    /**
      * The paths in moved directories, in the autoloading and in extra.installer-paths; a path whose files moved to
      * different places is listed
      *
@@ -116,6 +137,7 @@ JSON, $composer->contents());
     "autoload": {
         "classmap": ["app/Controller/", "app/Model", "app/View/", "vendors/"],
         "psr-0": {"Legacy_": ["app/Lib/", "lib/"]},
+        "psr-4": {"App\\": "src/"},
         "files": ["app/Config/functions.php"]
     },
     "extra": {
@@ -135,6 +157,8 @@ JSON;
             'app/Lib' => 'src/Lib',
             'app/View/Helper' => 'src/View/Helper',
             'app/Plugin' => 'plugins',
+            // In src/, which stays the path of App\
+            'src/Lib/Utility' => 'src/Utility',
         ]);
 
         $this->assertSame([

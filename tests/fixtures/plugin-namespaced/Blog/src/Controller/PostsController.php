@@ -2,12 +2,12 @@
 
 namespace Blog\Controller;
 
-use Blog\Model\Post;
-use Cake\Controller\Component\PaginatorComponent;
 use Blog\Controller\Component\FeedComponent;
-use Cake\View\Helper\HtmlHelper;
-use Blog\View\Helper\MarkdownHelper;
 use Blog\Lib\Markdown;
+use Blog\Model\Post;
+use Blog\View\Helper\MarkdownHelper;
+use Cake\Controller\Component\PaginatorComponent;
+use Cake\View\Helper\HtmlHelper;
 
 class PostsController extends BlogAppController
 {

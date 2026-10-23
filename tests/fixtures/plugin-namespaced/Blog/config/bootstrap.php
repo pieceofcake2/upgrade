@@ -1,6 +1,8 @@
 <?php
 
 use Blog\Log\Engine\BlogLog;
+use Cake\Core\Configure;
+use Cake\Log\CakeLog;
 
 Configure::write('Blog.perPage', 10);
 

@@ -35,7 +35,8 @@ use PhpParser\ParserFactory;
  *
  * Rector keeps the formatting of the statements that it does not change, so it prints the new namespace and use
  * statements wherever the old statements were, around the docblock of the file. The rest of the file stays as it is.
- * A file without a namespace (`config/core.php`) is only changed when it starts with use statements.
+ * A file without a namespace (`config/core.php`) is only changed when it starts with use statements. The use
+ * statements are sorted, as the CakePHP coding standard expects (see UseOrder).
  */
 final class HeaderFormatter
 {
@@ -59,22 +60,34 @@ final class HeaderFormatter
         if ($head === null) {
             return $code;
         }
-        [$declares, $namespace, $uses, $first, $docs] = $head;
+        [$declares, $namespace, $uses, $first, $docComments] = $head;
         $comments = $first->getComments();
-        if ($docs === [] && $comments !== [] && (!$first instanceof ClassLike || count($comments) > 1)) {
-            $docs[] = array_shift($comments)->getText();
+        if ($docComments === [] && $comments !== [] && (!$first instanceof ClassLike || count($comments) > 1)) {
+            $docComments[] = array_shift($comments);
         }
+        // A comment keeps the indentation of its first line, as in config/routes.php of CakePHP 2
+        $indent = static function (Comment $comment) use ($code): string {
+            $start = $comment->getStartFilePos();
+            $lineStart = strrpos(substr($code, 0, $start), "\n");
+            $indent = substr($code, $lineStart === false ? 0 : $lineStart + 1, $start - ($lineStart === false ? 0 : $lineStart + 1));
+
+            return trim($indent) === '' ? $indent : '';
+        };
+        $docs = array_map(static fn(Comment $comment): string => $indent($comment) . $comment->getText(), $docComments);
         $restStart = $comments !== [] ? $comments[0]->getStartFilePos() : $first->getStartFilePos();
         $lineStart = strrpos(substr($code, 0, $restStart), "\n");
         $rest = substr($code, $lineStart === false ? $restStart : $lineStart + 1);
 
         $eol = str_contains($code, "\r\n") ? "\r\n" : "\n";
         $text = static fn(Node $node): string => substr($code, $node->getStartFilePos(), $node->getEndFilePos() - $node->getStartFilePos() + 1);
+        // The use statements get the indentation of the docblock of the file, as config/routes.php of pieceofcake2/app
+        $useIndent = $docComments !== [] ? $indent($docComments[0]) : '';
+        $useTexts = UseOrder::sort(array_map(static fn(Node\Stmt $use): array => [$use, $useIndent . $text($use)], $uses));
         $blocks = array_filter([
             implode($eol, $docs),
             implode($eol, array_map($text, $declares)),
             $namespace !== null ? 'namespace ' . $namespace . ';' : '',
-            implode($eol, array_map($text, $uses)),
+            implode($eol, $useTexts),
         ], static fn(string $block): bool => $block !== '');
 
         return '<?php' . $eol . ($docs === [] ? $eol : '') . implode($eol . $eol, $blocks) . $eol . $eol . $rest;
@@ -84,7 +97,7 @@ final class HeaderFormatter
      * The statements of the beginning of a file
      *
      * @param array<\PhpParser\Node\Stmt> $stmts The statements of the file
-     * @return array{array<\PhpParser\Node\Stmt>, string|null, array<\PhpParser\Node\Stmt>, \PhpParser\Node\Stmt, array<string>}|null
+     * @return array{array<\PhpParser\Node\Stmt>, string|null, array<\PhpParser\Node\Stmt>, \PhpParser\Node\Stmt, array<\PhpParser\Comment>}|null
      *   The declare statements, the namespace, the use statements, the first other statement and the comments before
      *   it, or null when the file cannot be formatted
      */
@@ -126,7 +139,7 @@ final class HeaderFormatter
                     $namespace?->name?->toString(),
                     $uses,
                     $stmt,
-                    array_map(static fn(Comment $comment): string => $comment->getText(), $comments),
+                    $comments,
                 ];
             }
         }

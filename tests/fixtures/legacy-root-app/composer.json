@@ -1,0 +1,21 @@
+{
+    "name": "acme/shop",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "acme/tags": "^1.0",
+        "pieceofcake2/cakephp": "^2.13"
+    },
+    "autoload": {
+        "classmap": ["Controller/", "Model/", "Lib/", "Console/Command/", "View/Helper/"]
+    },
+    "autoload-dev": {
+        "classmap": ["Test/"]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    }
+}

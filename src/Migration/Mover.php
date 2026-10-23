@@ -104,6 +104,23 @@ final class Mover
     }
 
     /**
+     * Whether Git tracks a file and it has no changes since the last commit, so that Git keeps its contents when it is
+     * overwritten
+     *
+     * @param string $path The absolute path
+     * @return bool
+     */
+    public function isCommitted(string $path): bool
+    {
+        if (!$this->canRemove($path)) {
+            return false;
+        }
+        exec(sprintf('git -C %s diff --quiet HEAD -- %s 2>/dev/null', escapeshellarg($this->root), escapeshellarg($path)), $output, $code);
+
+        return $code === 0;
+    }
+
+    /**
      * Removes a file with `git rm`, if Git tracks it. Git refuses to remove a file with changes that it has not
      * committed, so they are never lost.
      *
