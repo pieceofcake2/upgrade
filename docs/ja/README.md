@@ -283,7 +283,7 @@ bin/cake upgrade rector --rules class-name-strings src tests config
 
 ```bash
 # 1. CakePHP 2 の構成 (app/Config/、app/Controller/、app/View/ など) を config/、src/、templates/ などに移す
-#    (app/ がない場合は Console/cake upgrade layout)
+#    (app/ がない場合は Console/cake upgrade layout -root "$PWD" -app "$PWD"。後述)
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
 composer dump-autoload
@@ -383,6 +383,17 @@ CakePHP のクラスをグローバルな名前 (`ShellDispatcher`、`Dispatcher
 - 古いエントリーファイルで `ROOT` (アプリケーションの親ディレクトリでした) から作る定数も一覧で表示します。
 - ルートにある `index.php` と `.htaccess` は `webroot/` につなぐファイルなので、そのまま残します。Web サーバーの
   ドキュメントルートを `webroot/` にしてから削除してください。
+
+このようなアプリケーションの `layout` は、ルートで `-root` と `-app` を付けて実行してください。
+
+```bash
+Console/cake upgrade layout -root "$PWD" -app "$PWD"
+```
+
+pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレクトリをプロジェクトのルートとみなし、
+アプリケーションをその `app/` の中で探します。`-app "$PWD"` で、そのディレクトリ自体がアプリケーションであることを
+指定します。付けずに実行した場合、`layout` は何も変更せず、このコマンドを表示します。古いコンソールを使うのは移行の
+ときの 1 回だけで、移行後は新しい構成の `bin/cake` がオプションなしで動きます。
 
 プラグインの `src/` には名前空間付きのクラスだけを置くので、プラグインのクラスはこの段階では移しません
 (`namespace` で `src/` に移ります)。`Config/` は `config/` に、`View/` のテンプレートは `templates/` に、

@@ -347,6 +347,24 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
     }
 
     /**
+     * The console of CakePHP 2 runs `app/` of the directory of composer.json unless `-root` and `-app` say where the
+     * application is: `layout` then changes nothing and prints the command
+     *
+     * @return void
+     */
+    public function testRootApplicationWithoutAppOption(): void
+    {
+        $app = $this->_copy('legacy-root-app', 'app');
+        $this->_app = $app . DS . 'app' . DS;
+
+        $this->_run($app, ['layout']);
+
+        $this->assertSame([sprintf('The console runs the application of %s, not %s, which has Config/ and Controller/ in its root: the console looks for the application in app/ of the directory of composer.json. Run `Console/cake upgrade layout -root "$PWD" -app "$PWD"` from %s.', $app . DS . 'app', $app, $app)], $this->_errors);
+        $this->_assertSameTree($this->_fixture('legacy-root-app'), $app);
+        $this->assertStringNotContainsString('Move', $this->out->output);
+    }
+
+    /**
      * A `Config/define.php` in the old form with changes that are not committed stays, with its constants and those of
      * the old entry files, and is listed
      *

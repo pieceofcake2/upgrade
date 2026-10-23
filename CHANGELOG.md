@@ -35,7 +35,9 @@
   `webroot/index.php` and `webroot/test.php` and a `Config/define.php` in the old form when Git has them, and keeps the
   entry files that the application already has in the new style, with the paths of the moved directories updated. The
   constants of the old entry files that are built on the paths of the old layout or defined under a condition are listed
-  instead of copied
+  instead of copied. Run it with `Console/cake upgrade layout -root "$PWD" -app "$PWD"`, as the console looks for the
+  application in `app/` of the directory of `composer.json`; without the options, `layout` changes nothing and prints
+  this command
   ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))
 - `namespace` no longer asks to update `autoload.psr-4: src/` by hand when it moves `src/Lib/<Type>/` to
   `src/<Type>/` ([PR #23](https://github.com/pieceofcake2/upgrade/pull/23))

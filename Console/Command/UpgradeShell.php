@@ -233,7 +233,7 @@ class UpgradeShell extends AppShell
     {
         $plugin = $this->params['plugin'] ?? null;
         $root = $plugin ? $this->_pluginPath((string)$plugin) : $this->_projectRoot();
-        if ($root === null) {
+        if ($root === null || (!$plugin && !$this->_runsRootApplication($root))) {
             return;
         }
         $plan = $plugin ? LayoutPlan::forPlugin($root) : LayoutPlan::forApplication($root);
@@ -273,6 +273,38 @@ class UpgradeShell extends AppShell
             // composer install puts the plugins of Composer in plugins/
             $this->out(__d('cake_console', 'Next, delete the cache files in tmp/cache/, which hold the paths of the old layout, and run composer %s and the tests. Then `bin/cake upgrade namespace` moves the classes into a namespace.', $plan->layout === LayoutPlan::ROOT_APP ? 'install' : 'dump-autoload'));
         }
+    }
+
+    /**
+     * Whether the console runs the application, for an application whose root is the directory `app/` of CakePHP 2.
+     * The console of CakePHP 2 takes the directory of composer.json for the root of the project and looks for the
+     * application in its `app/`, unless `-root` and `-app` say where it is: then it prints the command to run.
+     *
+     * @param string $root The root of the project
+     * @return bool
+     */
+    protected function _runsRootApplication($root)
+    {
+        if (LayoutPlan::detect($root) !== LayoutPlan::ROOT_APP) {
+            return true;
+        }
+        $app = rtrim($this->_appDirectory(), DS);
+        if ((realpath($app) ?: $app) === $root) {
+            return true;
+        }
+        $this->error(__d('cake_console', 'The console runs the application of %s, not %s, which has Config/ and Controller/ in its root: the console looks for the application in app/ of the directory of composer.json. Run `Console/cake upgrade layout -root "$PWD" -app "$PWD"` from %s.', $app, $root, $root));
+
+        return false;
+    }
+
+    /**
+     * The directory of the application that the console runs
+     *
+     * @return string
+     */
+    protected function _appDirectory()
+    {
+        return APP;
     }
 
     /**

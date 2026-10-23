@@ -271,7 +271,7 @@ of [pieceofcake2/app](https://github.com/pieceofcake2/app), then its classes int
 
 ```bash
 # 1. The CakePHP 2 layout (app/Config/, app/Controller/, app/View/, ...) to config/, src/, templates/, ...
-#    (without app/: Console/cake upgrade layout)
+#    (without app/: Console/cake upgrade layout -root "$PWD" -app "$PWD", see below)
 app/Console/cake upgrade layout --dry-run
 app/Console/cake upgrade layout
 composer dump-autoload
@@ -364,6 +364,17 @@ An application without `app/`, whose root is the directory `app/` of CakePHP 2 (
   are listed too.
 - `index.php` and `.htaccess` in the root lead to `webroot/` and stay: set the document root of the web server to
   `webroot/`, then delete them.
+
+Run `layout` of such an application with `-root` and `-app`, from its root:
+
+```bash
+Console/cake upgrade layout -root "$PWD" -app "$PWD"
+```
+
+The console of pieceofcake2/cakephp takes the directory of `composer.json` for the root of the project and looks for
+the application in its `app/`; `-app "$PWD"` tells it that the application is the directory itself. Without them,
+`layout` changes nothing and prints this command. You run the old console only once, for the move: afterwards, the
+`bin/cake` of the new layout works without options.
 
 A plugin keeps its classes where they are, as the `src/` of a plugin holds namespaced classes only (they move into
 `src/` with `namespace`): `Config/` moves to `config/`, the templates of `View/` to `templates/`, `Locale/` to

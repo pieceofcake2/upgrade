@@ -63,6 +63,13 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
     protected $_cwd;
 
     /**
+     * The directory of the application that the console runs, or null for the working directory
+     *
+     * @var string|null
+     */
+    protected $_app;
+
+    /**
      * The errors of the shell
      *
      * @var array<string>
@@ -86,10 +93,13 @@ abstract class UpgradeCommandTestCase extends CakeTestCase
 
         $this->out = new UpgradeCommandTestOutput();
         $in = $this->getMock('ConsoleInput', [], [], '', false);
-        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', 'error'], [$this->out, $this->out, $in]);
+        $this->Shell = $this->getMock('UpgradeShell', ['in', '_stop', 'clear', 'error', '_appDirectory'], [$this->out, $this->out, $in]);
         $this->Shell->expects($this->any())->method('error')->willReturnCallback(function (string $message): void {
             $this->_errors[] = $message;
         });
+        // The console runs the application of the working directory, as Console/cake -root "$PWD" -app "$PWD" does
+        $this->_app = null;
+        $this->Shell->expects($this->any())->method('_appDirectory')->willReturnCallback(fn(): string => $this->_app ?? (string)getcwd() . DS);
     }
 
     /**
