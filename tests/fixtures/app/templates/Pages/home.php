@@ -13,3 +13,4 @@ App::uses('Debugger', 'Utility');
 <h2><?php echo __d('cake_dev', 'Release Notes for CakePHP %s.', Configure::version()); ?></h2>
 <?php Debugger::checkSecurityKeys(); ?>
 <p><?php echo h(Slug::normalize(SITE_NAME)); ?></p>
+<p><?php echo __d('cake_dev', 'To change its layout, edit: %s.', '<code>View/Layouts/default.ctp</code>'); ?></p>

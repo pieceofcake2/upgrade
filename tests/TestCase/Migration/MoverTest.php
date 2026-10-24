@@ -54,6 +54,32 @@ class MoverTest extends CakeTestCase
     }
 
     /**
+     * Creates a Git repository in the root, or skips the test without Git
+     *
+     * @return void
+     */
+    protected function _initGit(): void
+    {
+        exec('git -C ' . escapeshellarg($this->_root) . ' init -q 2>&1', $output, $code);
+        if ($code !== 0) {
+            $this->markTestSkipped('git is not available');
+        }
+    }
+
+    /**
+     * Runs Git in the root
+     *
+     * @param string $arguments Arguments, escaped for the shell
+     * @return array<string> Output lines
+     */
+    protected function _git(string $arguments): array
+    {
+        exec('git -C ' . escapeshellarg($this->_root) . ' ' . $arguments, $output);
+
+        return $output;
+    }
+
+    /**
      * A directory moves, also into a new parent directory
      *
      * @return void
@@ -132,25 +158,70 @@ class MoverTest extends CakeTestCase
     }
 
     /**
+     * A directory with nothing but placeholder files is removed; one with another file stays as it is
+     *
+     * @return void
+     */
+    public function testRemovePlaceholderDirectory(): void
+    {
+        $lib = $this->_root . '/src/Lib';
+        $this->_write('src/Lib/empty');
+        $this->_write('src/Lib/Error/.gitkeep');
+        $this->_write('plugins/Lib/empty');
+        $this->_write('plugins/Lib/Foo.php', 'foo');
+        $mover = new Mover($this->_root);
+
+        $this->assertTrue($mover->removePlaceholderDirectory($lib));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/plugins/Lib'));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/missing'));
+
+        $this->assertDirectoryDoesNotExist($lib);
+        $this->assertDirectoryExists($this->_root . '/src');
+        $this->assertFileExists($this->_root . '/plugins/Lib/empty');
+        $this->assertFileExists($this->_root . '/plugins/Lib/Foo.php');
+    }
+
+    /**
+     * In a Git repository, the placeholder files are removed with git rm, also an empty one that is only added; a
+     * placeholder file with contents that are not committed stays
+     *
+     * @return void
+     */
+    public function testRemovePlaceholderDirectoryWithGit(): void
+    {
+        $lib = $this->_root . '/src/Lib';
+        $this->_initGit();
+        $this->_write('src/Lib/empty');
+        $this->_write('src/Lib/Error/.gitkeep');
+        $this->_write('plugins/Lib/.gitkeep', 'keep');
+        $this->_git('add -A');
+        $mover = new Mover($this->_root);
+
+        $this->assertTrue($mover->removePlaceholderDirectory($lib));
+        $this->assertFalse($mover->removePlaceholderDirectory($this->_root . '/plugins/Lib'));
+
+        $files = $this->_git('ls-files');
+        $this->assertSame(['plugins/Lib/.gitkeep'], $files);
+        $this->assertDirectoryDoesNotExist($lib);
+    }
+
+    /**
      * In a Git repository, a tracked file moves with git mv, an untracked one with rename()
      *
      * @return void
      */
     public function testGit(): void
     {
-        exec('git -C ' . escapeshellarg($this->_root) . ' init -q 2>&1', $output, $code);
-        if ($code !== 0) {
-            $this->markTestSkipped('git is not available');
-        }
+        $this->_initGit();
         $this->_write('app/Model/Post.php', 'post');
         $this->_write('app/Model/Draft.php', 'draft');
-        exec('git -C ' . escapeshellarg($this->_root) . ' add app/Model/Post.php');
+        $this->_git('add app/Model/Post.php');
         $mover = new Mover($this->_root);
 
         $mover->move($this->_root . '/app/Model', $this->_root . '/src/Model');
 
         $this->assertTrue($mover->usesGit());
-        exec('git -C ' . escapeshellarg($this->_root) . ' ls-files', $files);
+        $files = $this->_git('ls-files');
         $this->assertSame(['src/Model/Post.php'], $files);
         $this->assertSame('draft', file_get_contents($this->_root . '/src/Model/Draft.php'));
     }
@@ -162,18 +233,15 @@ class MoverTest extends CakeTestCase
      */
     public function testIsCommitted(): void
     {
-        exec('git -C ' . escapeshellarg($this->_root) . ' init -q 2>&1', $output, $code);
-        if ($code !== 0) {
-            $this->markTestSkipped('git is not available');
-        }
+        $this->_initGit();
         $this->_write('webroot/index.php', 'old');
         $this->_write('webroot/test.php', 'old');
         $this->_write('webroot/new.php', 'new');
         $mover = new Mover($this->_root);
-        exec('git -C ' . escapeshellarg($this->_root) . ' add webroot/index.php webroot/test.php');
+        $this->_git('add webroot/index.php webroot/test.php');
         $this->assertFalse($mover->isCommitted($this->_root . '/webroot/index.php'));
 
-        exec('git -C ' . escapeshellarg($this->_root) . ' -c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m Old');
+        $this->_git('-c user.name=Test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m Old');
         $this->_write('webroot/test.php', 'changed');
 
         $this->assertTrue($mover->isCommitted($this->_root . '/webroot/index.php'));

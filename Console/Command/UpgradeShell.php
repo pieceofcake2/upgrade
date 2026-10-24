@@ -26,6 +26,7 @@ use PieceOfCake2\Upgrade\Migration\Mover;
 use PieceOfCake2\Upgrade\Migration\NameImporter;
 use PieceOfCake2\Upgrade\Migration\NamespacePlan;
 use PieceOfCake2\Upgrade\Migration\Paths;
+use PieceOfCake2\Upgrade\Migration\References;
 use PieceOfCake2\Upgrade\Rector\Report;
 
 App::uses('AppShell', 'Console/Command');
@@ -52,6 +53,13 @@ class UpgradeShell extends AppShell
      * @var array
      */
     protected $_paths = [];
+
+    /**
+     * The names of the files in the report of Rector, by name of their temporary copy
+     *
+     * @var array<string, string>
+     */
+    protected $_reportNames = [];
 
     /**
      * Map
@@ -174,6 +182,8 @@ class UpgradeShell extends AppShell
             unlink($report);
         }
         if ($lines !== []) {
+            // The places in the copies of the default files of config/ are the ones of the default files
+            $lines = array_map(fn(string $line): string => strtr($line, $this->_reportNames), $lines);
             sort($lines);
             $this->out(__d('cake_console', '<warning>Review these places:</warning>'));
             foreach ($lines as $line) {
@@ -267,6 +277,9 @@ class UpgradeShell extends AppShell
             }
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        if ($plan->moves !== []) {
+            $this->_reviewTemplateReferences($plan, $dryRun);
+        }
         if (!$nothing && !$dryRun && $plugin) {
             $this->out(__d('cake_console', 'Next, run composer dump-autoload and the tests. Then `bin/cake upgrade namespace --plugin %s` moves the classes into a namespace.', $plugin));
         } elseif (!$nothing && !$dryRun) {
@@ -434,6 +447,40 @@ class UpgradeShell extends AppShell
     }
 
     /**
+     * Lists the lines of `templates/`, `config/` and `src/` that name the templates of the CakePHP 2 layout
+     * (`.ctp`, `.thtml`, `Layouts/`, `Elements/`, `Emails/`, `Errors/`), which the moves did not change: texts and
+     * comments such as `templates/Pages/home.ctp`, or the paths of the code
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\LayoutPlan $plan The plan
+     * @param bool $dryRun Whether the moves are only shown
+     * @return void
+     */
+    protected function _reviewTemplateReferences(LayoutPlan $plan, $dryRun)
+    {
+        // The templates of bake keep .ctp
+        $lines = References::find($plan->root, ['templates', 'config', 'src'], References::TEMPLATES, ['src/Console/Templates'], $dryRun ? $plan->moves : []);
+        $this->_reviewReferences(__d('cake_console', 'These lines name the templates of the CakePHP 2 layout, which are now .php files in templates/ with the directories layout/, element/, email/ and Error/. Review them, they were not changed:'), $lines);
+    }
+
+    /**
+     * Prints the lines that name paths of the old layout, for a review
+     *
+     * @param string $message What to review
+     * @param array<string> $lines The lines, as `<file>:<line>: <text>`
+     * @return void
+     */
+    protected function _reviewReferences($message, array $lines)
+    {
+        if ($lines === []) {
+            return;
+        }
+        $this->out(sprintf('<warning>%s</warning>', $message));
+        foreach ($lines as $line) {
+            $this->out('  ' . $line);
+        }
+    }
+
+    /**
      * Updates the paths of the moved directories in the entry files that the application has (`bin/cake`,
      * `config/define.php`, ...), and lists them for review
      *
@@ -546,20 +593,23 @@ class UpgradeShell extends AppShell
             $this->out(__d('cake_console', 'Move %s to %s', $mover->relative($from), $mover->relative($to)));
             $mover->move($from, $to);
         }
-        foreach (['src' . DS . 'Lib', 'Lib'] as $dir) {
-            $mover->removeEmpty($work . DS . $dir);
-        }
+        $this->_removeLib($plan, $mover);
         $before = $dryRun ? $this->_copyForDryRun($work, 'before') : null;
-        $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
-
-        $cwd = (string)getcwd();
-        chdir($work);
+        // Rector reads .php files: the default files of config/ go through copies
+        $copies = $this->_copyDefaultFiles($plan);
         try {
-            $code = $this->_runNamespaceRules($plan, $plugin ? null : $namespace);
+            $hashes = $this->_hashes(array_merge($plan->codePaths(), $plan->configPaths(), $plan->entryFiles()));
+            $cwd = (string)getcwd();
+            chdir($work);
+            try {
+                $code = $this->_runNamespaceRules($plan, $plugin ? null : $namespace);
+            } finally {
+                chdir($cwd);
+            }
+            $this->_formatHeaders($plan, $hashes);
         } finally {
-            chdir($cwd);
+            $this->_restoreDefaultFiles($copies);
         }
-        $this->_formatHeaders($plan, $hashes);
         if ($code !== 0) {
             if ($before !== null) {
                 (new Folder(dirname($work, 2)))->delete();
@@ -573,16 +623,82 @@ class UpgradeShell extends AppShell
             $this->_addAppNamespace($work, $namespace);
         }
         $this->_updateComposerJson($plan, $root, $work, $dryRun);
+        $lines = References::find($work, ['config'], References::namespacePattern(!Paths::hasDirectory($work . DS . 'src', 'Lib')));
         if ($before !== null) {
             $this->out($this->_diff($before, $work));
             (new Folder(dirname($work, 2)))->delete();
         }
         $this->_notices(array_merge($mover->warnings(), $plan->notices));
+        $this->_reviewReferences(__d('cake_console', 'These lines of config/ name the classmap of Composer, composer dump-autoload or src/Lib/, which PSR-4 and the moves to src/<Type>/ replace. Review them, they were not changed:'), $lines);
         if (!$dryRun) {
             $this->out(__d('cake_console', 'Next, review the changes (git diff), run composer dump-autoload and the tests. The code needs pieceofcake2/cakephp 2.13 or later.'));
         }
 
         return $code;
+    }
+
+    /**
+     * Removes `src/Lib/` (and `Lib/` of a plugin) after the moves to `src/<Type>/`, when it holds nothing but
+     * placeholder files (`empty`, `.gitkeep`): namespaced code has no `Lib`. It stays with any other file, e.g.
+     * `src/Lib/Foo.php` (App\Lib\Foo).
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @param \PieceOfCake2\Upgrade\Migration\Mover $mover Removes the files
+     * @return void
+     */
+    protected function _removeLib(NamespacePlan $plan, Mover $mover)
+    {
+        foreach (['src/Lib', 'Lib'] as $dir) {
+            $path = $plan->root . DS . str_replace('/', DS, $dir);
+            if (!Paths::hasDirectory(dirname($path), basename($path))) {
+                continue;
+            }
+            $mover->removeEmpty($path);
+            if (is_dir($path) && $mover->removePlaceholderDirectory($path)) {
+                $this->out(__d('cake_console', 'Remove %s/, which holds no classes, only placeholder files', $dir));
+            }
+        }
+    }
+
+    /**
+     * Copies the default files of `config/` (`email.php.default`) to temporary `.php` files, which Rector reads
+     *
+     * @param \PieceOfCake2\Upgrade\Migration\NamespacePlan $plan The plan
+     * @return array<string, string> The default files, by copy
+     */
+    protected function _copyDefaultFiles(NamespacePlan $plan)
+    {
+        $copies = [];
+        foreach ($plan->defaultFiles() as $file) {
+            $copy = $file . '.upgrade-' . getmypid() . '.php';
+            if (copy($file, $copy)) {
+                $copies[$copy] = $file;
+                $this->_reportNames[basename($copy)] = basename($file);
+            }
+        }
+
+        return $copies;
+    }
+
+    /**
+     * Writes the changes of the copies of the default files of `config/` back to them, and removes the copies
+     *
+     * @param array<string, string> $copies The default files, by copy
+     * @return void
+     */
+    protected function _restoreDefaultFiles(array $copies)
+    {
+        foreach ($copies as $copy => $file) {
+            if (!is_file($copy)) {
+                continue;
+            }
+            $contents = (string)file_get_contents($copy);
+            if ($contents !== (string)file_get_contents($file)) {
+                file_put_contents($file, $contents);
+            }
+            unlink($copy);
+        }
+        $this->_reportNames = [];
     }
 
     /**

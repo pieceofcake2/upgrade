@@ -9,4 +9,5 @@ Router::connect('/posts/:slug', ['controller' => 'posts', 'action' => 'view'], [
 
 CakePlugin::routes();
 
+// The home page: View/Pages/home.ctp
 require CAKE . 'Config' . DS . 'routes.php';

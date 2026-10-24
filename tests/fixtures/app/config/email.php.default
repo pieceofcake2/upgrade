@@ -1,0 +1,20 @@
+<?php
+/**
+ * The email configuration, which the application copies to email.php
+ */
+
+/**
+ * Custom transports go in src/Lib/Network/Email, autoloaded by the Composer classmap.
+ */
+class EmailConfig
+{
+    public $default = [
+        'transport' => 'Mail',
+        'from' => 'you@localhost',
+    ];
+
+    public $smtp = [
+        'transport' => 'Smtp',
+        'host' => 'localhost',
+    ];
+}

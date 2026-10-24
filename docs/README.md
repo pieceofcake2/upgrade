@@ -405,6 +405,17 @@ What you do by hand, as the command lists it:
 - Remove `$ext = '.thtml'` from your controllers and views when `.thtml` templates became `.php`.
 - Paths in your code (`APP . 'Config' . DS`, `App::build()`), in your web server configuration, in `.gitignore`
   (`app/tmp/`) and in your deployment are not changed. The lines of `.gitignore` that name moved paths are listed.
+- The texts and comments that name the old templates are not changed, as only you can tell what they mean: after the
+  moves, the lines of `templates/`, `config/` and `src/` that name `.ctp` or `.thtml` files or the directories
+  `Layouts/`, `Elements/`, `Emails/` and `Errors/` are listed as `<file>:<line>` for a review (a dry run lists them
+  at the places of the files after the moves), e.g.
+
+  ```text
+  config/routes.php:29: * to use (in this case, templates/Pages/home.ctp)...
+  templates/Pages/home.php:322: <li><?php echo __d('cake_dev', 'To change its layout, edit: %s.', '<code>templates/Layouts/default.ctp</code>'); ?></li>
+  ```
+
+  The templates of bake in `src/Console/Templates/` keep `.ctp` and are not listed.
 
 ### `namespace`
 
@@ -420,6 +431,8 @@ The command moves the files:
   `Core`, `Error`, `Event`, `I18n`, `Log`, `Model`, `Network`, `Routing`, `TestSuite`, `Utility`, `View`): namespaced
   code has no `Lib`, so `src/Lib/Error/AppExceptionRenderer.php` becomes `App\Error\AppExceptionRenderer` in
   `src/Error/`. A file directly in `src/Lib/` stays, e.g. `App\Lib\MyTool`.
+- `src/Lib/` is then removed when it holds nothing but placeholder files (`empty`, `.gitkeep`), with `git rm` in a
+  Git repository, as in the skeleton of pieceofcake2/app. It stays with any other file.
 - A copy of a class of CakePHP in an application (a core class override, e.g. `src/Lib/Routing/Dispatcher.php`)
   moves to `src/Cake/<path>` (`src/Cake/Routing/Dispatcher.php`), keeps the namespace of CakePHP
   (`Cake\Routing`) and gets its `class_alias()`, as the files of CakePHP have. Compare it with the current file of
@@ -447,6 +460,9 @@ Then it changes the code with Rector:
   and get `use` statements for the classes of CakePHP and of the application that they name, e.g.
   `use Cake\Core\Configure;` for `Configure::write()`. The code does not change otherwise: only the names, with the
   class names of the settings. The use statements go after the docblock of the file, between blank lines.
+- The default files of `config/` (`email.php.default`, `database.php.default`), which you copy to `email.php` and
+  `database.php`, get the same changes as the files of `config/`, e.g. `'transport' => MailTransport::class`, so that
+  a new copy matches the changed configuration.
 - A template gets the use statements at the top, as in the templates of pieceofcake2/app, also for the classes of its
   docblocks (`use Cake\View\View;` for `@var View $this`): in its first block of PHP when it starts with one (after
   the docblock), else in a new block:
@@ -492,6 +508,14 @@ What `namespace` does not change, as the command lists it or as you check it:
   the classes of a plugin namespaced after it, and strings that are not listed above (`'Post'` in `paginate()`,
   which CakePHP reads as a model alias).
 - Data with the old class names: serialized objects in caches and sessions. Clear the caches.
+- The comments of `config/` that name the classmap of Composer, `composer dump-autoload` or the paths of `src/Lib/`
+  that moved (`src/Lib/Error`, and `src/Lib/` itself once it is removed) are listed as `<file>:<line>` for a review,
+  e.g.
+
+  ```text
+  config/core.php:61: *   A custom handler class in src/ is autoloaded by the Composer classmap (run `composer dump-autoload`
+  config/core.php:90: *   should place the file for that class in src/Lib/Error. This class needs to implement a render method.
+  ```
 
 Run `composer dump-autoload` and your tests afterwards, and review the changes with `git diff`.
 

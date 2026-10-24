@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## Unreleased
+
+- `namespace` removes `src/Lib/` (and `Lib/` of a plugin) after the moves to `src/<Type>/` when it holds nothing but
+  placeholder files (`empty`, `.gitkeep`), with `git rm` in a Git repository, as namespaced code has no `Lib`. It
+  stays with any other file, e.g. `src/Lib/Foo.php` (`App\Lib\Foo`)
+  ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
+- `namespace` also changes the default files of `config/` (`email.php.default`, `database.php.default`) as the files
+  of `config/`, e.g. `'transport' => 'Mail'` becomes `MailTransport::class`, so that a new `email.php` matches the
+  changed configuration ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
+- `layout` lists the lines of `templates/`, `config/` and `src/` that still name the templates of the CakePHP 2 layout
+  (`.ctp`, `.thtml`, `Layouts/`, `Elements/`, `Emails/`, `Errors/`), e.g. `templates/Pages/home.ctp` in a text of the
+  home page, as `<file>:<line>` for a review, and `namespace` the comments of `config/` that name the classmap of
+  Composer, `composer dump-autoload` or the moved paths of `src/Lib/`. They are not changed
+  ([PR #25](https://github.com/pieceofcake2/upgrade/pull/25))
+
 ## v1.1.0 (2026-10-23)
 
 - New `rector` command, which runs the Rector rules of the plugin for a change of pieceofcake2/cakephp: the sets

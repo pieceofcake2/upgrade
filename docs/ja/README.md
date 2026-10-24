@@ -424,6 +424,17 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
 - `.thtml` のテンプレートを `.php` にした場合は、コントローラーやビューの `$ext = '.thtml'` を削除します。
 - コードの中のパス (`APP . 'Config' . DS`、`App::build()`)、Web サーバーの設定、`.gitignore` (`app/tmp/`)、
   デプロイの設定にあるパスは変更しません。`.gitignore` のうち、移動したパスを指す行は一覧で表示します。
+- 古いテンプレートを指す文章やコメントは、意味を判断できるのはご自身だけなので、書き換えません。移動の後、
+  `templates/`、`config/`、`src/` のうち、`.ctp` や `.thtml` のファイル、`Layouts/`、`Elements/`、`Emails/`、
+  `Errors/` のディレクトリを指す行を `<file>:<line>` の一覧で表示します (ドライランでは移動後のファイルの場所で
+  表示します)。例:
+
+  ```text
+  config/routes.php:29: * to use (in this case, templates/Pages/home.ctp)...
+  templates/Pages/home.php:322: <li><?php echo __d('cake_dev', 'To change its layout, edit: %s.', '<code>templates/Layouts/default.ctp</code>'); ?></li>
+  ```
+
+  `src/Console/Templates/` の bake のテンプレートは `.ctp` のままなので、一覧に含めません。
 
 <a id="namespace"></a>
 
@@ -441,6 +452,8 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
   名前空間付きのコードには `Lib` がないので、`src/Lib/Error/AppExceptionRenderer.php` は `src/Error/` の
   `App\Error\AppExceptionRenderer` になります。`src/Lib/` の直下のファイルはそのまま残ります
   (例: `App\Lib\MyTool`)。
+- その後、`src/Lib/` にプレースホルダーのファイル (`empty`、`.gitkeep`) しか残っていなければ、pieceofcake2/app の
+  スケルトンと同じように `src/Lib/` を削除します (Git リポジトリでは `git rm`)。ほかのファイルがあれば残します。
 - アプリケーションにある CakePHP のクラスのコピー (コアクラスの上書き。例: `src/Lib/Routing/Dispatcher.php`) は
   `src/Cake/<path>` (`src/Cake/Routing/Dispatcher.php`) に移し、CakePHP の名前空間 (`Cake\Routing`) のまま、
   CakePHP のファイルと同じように `class_alias()` を付けます。古いバージョンのコピーかもしれないので、今の
@@ -468,6 +481,9 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
   使っている CakePHP とアプリケーションのクラスに `use` を付けます (`Configure::write()` には
   `use Cake\Core\Configure;`)。変わるのは名前と設定のクラス名だけで、ほかのコードはそのままです。`use` は
   ファイルの docblock の後に、前後に空行を入れて置きます。
+- `config/` のデフォルトのファイル (`email.php.default`、`database.php.default`。`email.php` や `database.php` に
+  コピーして使います) も、`config/` のファイルと同じように書き換えます (`'transport' => MailTransport::class`
+  など)。新しくコピーしたファイルが、書き換えた設定と同じ形になります。
 - テンプレートでは、pieceofcake2/app のテンプレートと同じように、先頭に `use` を置きます。docblock に書かれた
   クラスにも `use` を付けます (`@var View $this` には `use Cake\View\View;`)。テンプレートが PHP のブロックで
   始まる場合はそのブロックの中 (docblock の後) に、そうでなければ新しいブロックに置きます。
@@ -514,6 +530,14 @@ pieceofcake2/cakephp のコンソールは、`composer.json` のあるディレ�
   後で名前空間に移した場合の、アプリケーションのコードなど) と、上に挙げた以外の文字列 (`paginate()` の
   `'Post'` など。CakePHP はモデルの別名として読みます)。
 - 古いクラス名を含むデータ (キャッシュやセッションにシリアライズしたオブジェクト)。キャッシュを消してください。
+- `config/` のコメントのうち、Composer の classmap、`composer dump-autoload`、移動した `src/Lib/` のパス
+  (`src/Lib/Error`。`src/Lib/` を削除した場合は `src/Lib/` 自体も) を指す行は、`<file>:<line>` の一覧で表示します。
+  例:
+
+  ```text
+  config/core.php:61: *   A custom handler class in src/ is autoloaded by the Composer classmap (run `composer dump-autoload`
+  config/core.php:90: *   should place the file for that class in src/Lib/Error. This class needs to implement a render method.
+  ```
 
 実行した後は `composer dump-autoload` とテストを実行し、`git diff` で変更を確認してください。
 

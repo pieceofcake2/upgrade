@@ -55,6 +55,14 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('.htaccess leads to app/webroot/, which moved to webroot/', $output);
         $this->assertStringContainsString('remove the $ext = \'.thtml\'', $output);
         $this->assertStringContainsString('Not a Git repository', $output);
+        // The lines that name the old templates are listed, not changed
+        $this->assertStringContainsString(
+            "Review them, they were not changed:\n" .
+            "  config/routes.php:9: // The home page: View/Pages/home.ctp\n" .
+            "  templates/Pages/home.php:16: <p><?php echo __d('cake_dev', 'To change its layout, edit: %s.', '<code>View/Layouts/default.ctp</code>'); ?></p>\n" .
+            'Next, ',
+            $output,
+        );
         $this->assertStringContainsString('Next, delete the cache files in tmp/cache/, which hold the paths of the old layout, and run composer dump-autoload and the tests.', $output);
         $this->assertSame([], $this->_errors);
     }
@@ -147,6 +155,9 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
         $this->assertStringContainsString('Create bin/cake of pieceofcake2/app', $output);
         $this->assertStringContainsString('Keep the constant SITE_NAME of app/webroot/index.php', $output);
         $this->assertStringNotContainsString('Not a Git repository', $output);
+        // The lines that name the old templates, at the places of the files after the moves
+        $this->assertStringContainsString('  config/routes.php:9: // The home page: View/Pages/home.ctp', $output);
+        $this->assertStringContainsString('  templates/Pages/home.php:16: ', $output);
     }
 
     /**

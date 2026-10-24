@@ -1,0 +1,23 @@
+<?php
+/**
+ * The email configuration, which the application copies to email.php
+ */
+
+use Cake\Network\Email\MailTransport;
+use Cake\Network\Email\SmtpTransport;
+
+/**
+ * Custom transports go in src/Lib/Network/Email, autoloaded by the Composer classmap.
+ */
+class EmailConfig
+{
+    public $default = [
+        'transport' => MailTransport::class,
+        'from' => 'you@localhost',
+    ];
+
+    public $smtp = [
+        'transport' => SmtpTransport::class,
+        'host' => 'localhost',
+    ];
+}
