@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `layout` no longer lists a `.gitkeep` file of `app/Plugin/` as a file to move by hand ("Not moved, move or replace
+  them by hand"): like `empty`, it only keeps the directory in Git. pieceofcake2/app keeps its empty directories with
+  `.gitkeep` files now, as CakePHP 5 does ([PR #26](https://github.com/pieceofcake2/upgrade/pull/26))
 - `namespace` removes `src/Lib/` (and `Lib/` of a plugin) after the moves to `src/<Type>/` when it holds nothing but
   placeholder files (`empty`, `.gitkeep`), with `git rm` in a Git repository, as namespaced code has no `Lib`. It
   stays with any other file, e.g. `src/Lib/Foo.php` (`App\Lib\Foo`)

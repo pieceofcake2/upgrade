@@ -338,7 +338,7 @@ final class LayoutPlan
             if ($entry === 'Plugin') {
                 $left = array_merge($left, array_map(static fn(string $file): string => 'app/Plugin/' . $file, array_filter(
                     Paths::entries($app . DIRECTORY_SEPARATOR . 'Plugin'),
-                    static fn(string $file): bool => $file !== 'empty' && !is_dir($app . DIRECTORY_SEPARATOR . 'Plugin' . DIRECTORY_SEPARATOR . $file),
+                    static fn(string $file): bool => !in_array($file, Mover::PLACEHOLDERS, true) && !is_dir($app . DIRECTORY_SEPARATOR . 'Plugin' . DIRECTORY_SEPARATOR . $file),
                 )));
                 continue;
             }
