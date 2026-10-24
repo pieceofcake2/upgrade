@@ -68,6 +68,23 @@ class UpgradeLayoutTest extends UpgradeCommandTestCase
     }
 
     /**
+     * The placeholder files of `app/Plugin/` (`empty`, `.gitkeep`) are not listed as files to move by hand
+     *
+     * @return void
+     */
+    public function testPluginPlaceholdersAreNotListed(): void
+    {
+        $app = $this->_copy('legacy-app', 'app');
+        touch($app . '/app/Plugin/empty');
+        touch($app . '/app/Plugin/.gitkeep');
+
+        $this->_run($app, ['layout']);
+
+        $this->assertStringContainsString('Not moved, move or replace them by hand: app/.htaccess.', $this->out->output);
+        $this->assertSame([], $this->_errors);
+    }
+
+    /**
      * The templates keep their place in the directories of themes and plugins, the scaffold templates keep .ctp
      *
      * @return void
